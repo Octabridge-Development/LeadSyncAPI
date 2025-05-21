@@ -1,0 +1,33 @@
+# API Framework
+fastapi~=0.115.12
+uvicorn>=0.22.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+python-multipart>=0.0.6
+
+# Base de datos
+sqlalchemy>=2.0.0
+pyodbc>=4.0.39
+pymssql>=2.2.7
+
+# Azure
+azure-storage-queue>=12.6.0
+azure-identity>=1.13.0
+azure-keyvault-secrets>=4.7.0
+opencensus-ext-azure>=1.1.9
+
+# Odoo
+odoorpc>=0.8.0
+
+# Utilidades
+httpx>=0.24.1
+tenacity>=8.2.2
+python-jose>=3.3.0
+passlib>=1.7.4
+email-validator>=2.0.0
+
+# Testing
+pytest>=7.3.1
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.10.0
