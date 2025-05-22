@@ -1,7 +1,7 @@
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 from functools import lru_cache
-import os
 
+# Configuración usando Pydantic v2
 class Settings(BaseSettings):
     DEBUG: bool = True
     API_KEY: str = ""
@@ -17,9 +17,11 @@ class Settings(BaseSettings):
     USE_KEY_VAULT: bool = False
     KEY_VAULT_NAME: str = ""
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    # Pydantic v2: usa model_config para .env
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8"
+    }
 
 @lru_cache()
 def get_settings():

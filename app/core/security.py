@@ -1,8 +1,13 @@
-from fastapi import Security, HTTPException, status
+from fastapi import Security, HTTPException, status, Request, Depends
 from fastapi.security.api_key import APIKeyHeader
 from .config import get_settings
+from fastapi_limiter.depends import RateLimiter
+import ipaddress
 
 api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+
+# Lista de IPs bloqueadas (puede migrarse a Redis o BD en producción)
+BLOCKED_IPS = set()
 
 def get_api_key(api_key: str = Security(api_key_header)):
     settings = get_settings()
@@ -13,3 +18,15 @@ def get_api_key(api_key: str = Security(api_key_header)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API Key",
         )
+
+# Dependencia para rate limiting y bloqueo de IPs
+async def secure_request(request: Request, api_key: str = Depends(get_api_key),
+                        limiter=Depends(RateLimiter(times=5, seconds=60))):
+    client_ip = request.client.host
+    try:
+        ipaddress.ip_address(client_ip)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid IP address")
+    if client_ip in BLOCKED_IPS:
+        raise HTTPException(status_code=403, detail="IP bloqueada")
+    return True
