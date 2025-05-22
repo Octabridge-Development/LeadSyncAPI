@@ -1,37 +1,44 @@
 import logging
 import sys
 import os
+import structlog
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+import uuid
 
-# Lee el nivel de log y formato desde variables de entorno
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()  # Nivel de log: DEBUG, INFO, WARNING, etc.
-LOG_FORMAT = os.getenv("LOG_FORMAT", "plain")  # Formato: 'plain' o 'json'
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
+LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
 
-# Formateador personalizado para logs en formato JSON
-class JsonFormatter(logging.Formatter):
-    def format(self, record):
-        import json
-        log_record = {
-            'level': record.levelname,
-            'time': self.formatTime(record, self.datefmt),
-            'name': record.name,
-            'message': record.getMessage(),
-        }
-        if record.exc_info:
-            log_record['exception'] = self.formatException(record.exc_info)
-        return json.dumps(log_record)
+# Configuración de structlog para logging estructurado
+structlog.configure(
+    processors=[
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.add_log_level,
+        structlog.processors.dict_tracebacks,
+        structlog.processors.JSONRenderer(),
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.getLevelName(LOG_LEVEL)),
+    context_class=dict,
+    logger_factory=structlog.stdlib.LoggerFactory(),
+    cache_logger_on_first_use=True,
+)
 
-# Configura el logging global de la aplicación
-# Llama a esta función al inicio para que todos los logs usen este formato
-def setup_logging():
-    handler = logging.StreamHandler(sys.stdout)
-    if LOG_FORMAT == "json":
-        formatter = JsonFormatter()  # Usa formato JSON
-    else:
-        formatter = logging.Formatter('[%(asctime)s] %(levelname)s in %(name)s: %(message)s')  # Formato plano
-    handler.setFormatter(formatter)
-    root = logging.getLogger()
-    root.setLevel(LOG_LEVEL)
-    root.handlers = [handler]
+# Middleware para correlación de requests
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+        structlog.contextvars.bind_contextvars(request_id=request_id)
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        structlog.contextvars.clear_contextvars()
+        return response
 
-# Inicializa el logging al importar el módulo
-setup_logging()
+# Inicializa logging estándar para compatibilidad
+logging.basicConfig(
+    format="%(message)s",
+    stream=sys.stdout,
+    level=LOG_LEVEL,
+)
+
+logger = structlog.get_logger()
