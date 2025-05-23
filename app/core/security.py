@@ -1,4 +1,4 @@
-from fastapi import Security, HTTPException, status, Request, Depends
+from fastapi import Security, HTTPException, status, Request, Depends, Header
 from fastapi.security.api_key import APIKeyHeader
 from .config import get_settings
 from fastapi_limiter.depends import RateLimiter
@@ -30,3 +30,9 @@ async def secure_request(request: Request, api_key: str = Depends(get_api_key),
     if client_ip in BLOCKED_IPS:
         raise HTTPException(status_code=403, detail="IP bloqueada")
     return True
+
+async def verify_manychat_api_key(x_api_key: str = Header(None)):
+    expected_key = get_settings().API_KEY  # Lee la API Key desde .env
+    if x_api_key != expected_key:
+        raise HTTPException(status_code=401, detail="Invalid API Key")
+    return x_api_key
