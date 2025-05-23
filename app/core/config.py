@@ -1,6 +1,12 @@
+# Este archivo contiene la configuración centralizada del proyecto.
+# Utiliza Pydantic para manejar variables de entorno y Azure Key Vault para secretos sensibles.
+# Proporciona la clase Settings y la función get_settings para acceder a la configuración.
+
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from pydantic import Field, AnyHttpUrl
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 # Configuración centralizada usando Pydantic v2
 class Settings(BaseSettings):
@@ -25,7 +31,21 @@ class Settings(BaseSettings):
         "env_file_encoding": "utf-8"
     }
 
+    def load_secrets_from_key_vault(self):
+        """Carga secretos desde Azure Key Vault si está habilitado."""
+        if self.USE_KEY_VAULT:
+            credential = DefaultAzureCredential()
+            key_vault_url = f"https://{self.KEY_VAULT_NAME}.vault.azure.net"
+            client = SecretClient(vault_url=key_vault_url, credential=credential)
+
+            # Sobrescribir configuraciones con secretos del Key Vault
+            self.API_KEY = client.get_secret("API-KEY").value
+            self.ODOO_PASSWORD = client.get_secret("ODOO-PASSWORD").value
+            self.AZURE_STORAGE_CONNECTION_STRING = client.get_secret("AZURE-STORAGE-CONNECTION-STRING").value
+            self.DATABASE_URL = client.get_secret("DATABASE-URL").value
+
 @lru_cache()
 def get_settings():
-    """Devuelve una instancia única de Settings (patrón singleton)."""
-    return Settings()
+    settings = Settings()
+    settings.load_secrets_from_key_vault()
+    return settings
