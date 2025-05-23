@@ -2,6 +2,7 @@
 fastapi~=0.115.12
 uvicorn>=0.22.0
 pydantic>=2.0.0
+pydantic-settings>=2.0.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
 
@@ -31,3 +32,10 @@ pytest>=7.3.1
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 pytest-mock>=3.10.0
+
+# Logging avanzado y estructurado
+structlog>=24.1.0
+# Rate limiting para FastAPI
+fastapi-limiter>=0.1.5
+# Redis para almacenamiento de rate limiting
+redis>=5.0.0
