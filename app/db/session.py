@@ -1,50 +1,19 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.ext.declarative import declarative_base
-from dotenv import load_dotenv
-import os
-import urllib.parse
-from contextlib import contextmanager # Importa esto para usar @contextmanager
+from contextlib import contextmanager
+from app.core.config import get_settings
+from typing import Generator
 
-# --- 0. Cargar variables de entorno ---
-# Asegúrate de tener un archivo .env en la raíz de tu proyecto
-# con las variables DATABASE_USER, DATABASE_PASSWORD, etc.
-load_dotenv()
-
-# --- 1. Clase de Configuración Centralizada ---
-# Aquí se definen todas las configuraciones relacionadas con la base de datos
-# Es una buena práctica para mantener tus settings organizadas.
-class Settings:
-    def __init__(self):
-        # Obtiene las variables de entorno o usa valores por defecto
-        self.DATABASE_USER = os.getenv("DATABASE_USER", "sa") # Por defecto 'sa' (usuario común de SQL Server)
-        # Codifica la contraseña para manejar caracteres especiales en la URL
-        self.DATABASE_PASSWORD = urllib.parse.quote_plus(os.getenv("DATABASE_PASSWORD", "YourStrongPassword_123"))
-        self.DATABASE_HOST = os.getenv("DATABASE_HOST", "localhost")
-        self.DATABASE_PORT = os.getenv("DATABASE_PORT", "1433") # Puerto estándar para SQL Server
-        self.DATABASE_NAME = os.getenv("DATABASE_NAME", "YourDatabaseName") # Nombre de tu base de datos
-
-        # Controla si SQLAlchemy debe imprimir las consultas SQL (útil para depuración)
-        # Se activa si DEBUG_MODE está en 'true' (sin importar mayúsculas/minúsculas)
-        self.DEBUG = os.getenv("DEBUG_MODE", "False").lower() == "true"
-
-        # Construye la URL de conexión para SQL Server con pyodbc
-        self.DATABASE_URL = (
-            f"mssql+pyodbc://{self.DATABASE_USER}:{self.DATABASE_PASSWORD}@{self.DATABASE_HOST}:{self.DATABASE_PORT}/"
-            f"{self.DATABASE_NAME}?driver=ODBC+Driver+18+for+SQL+Server&Encrypt=yes&TrustServerCertificate=no"
-        )
-
-# Instancia de las settings. Usarás 'settings.VARIABLE' para acceder a ellas.
-settings = Settings()
-
-# --- 2. Base Declarativa para Modelos SQLAlchemy ---
+# --- 1. Base Declarativa para Modelos SQLAlchemy ---
 # Todos tus modelos de base de datos (tablas) deben heredar de 'Base'.
 # Ejemplo: class Contact(Base): __tablename__ = "Contacts"
 Base = declarative_base()
 
-# --- 3. Configuración del Motor de SQLAlchemy ---
+# --- 2. Configuración del Motor de SQLAlchemy ---
 # El 'engine' es el punto de conexión real a tu base de datos.
 # Configuraciones del pool de conexiones para mejor rendimiento y estabilidad:
+settings = get_settings()
 engine = create_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,     # Imprime SQL si DEBUG_MODE es True
@@ -58,17 +27,17 @@ engine = create_engine(
     }
 )
 
-# --- 4. Configuración del Constructor de Sesiones ---
+# --- 3. Configuración del Constructor de Sesiones ---
 # 'SessionLocal' es una "fábrica" que crea nuevas sesiones de base de datos.
 # autocommit=False: Debes hacer commit explícitamente para guardar los cambios.
 # autoflush=False: Los objetos no se "flushean" automáticamente a la base de datos antes de un commit.
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# --- 5. Context Manager para Sesiones de Base de Datos (Recomendado) ---
+# --- 4. Context Manager para Sesiones de Base de Datos (Recomendado) ---
 # Usa esta función con la sentencia 'with' para garantizar que la sesión se abra
 # y cierre correctamente, incluso si ocurren errores.
 @contextmanager
-def get_db_session() -> Session:
+def get_db_session() -> Generator[Session, None, None]:
     """
     Proporciona una sesión de base de datos y la cierra automáticamente al finalizar.
     Asegura que se realice un rollback si ocurre alguna excepción y luego re-lanza la excepción.
@@ -83,9 +52,9 @@ def get_db_session() -> Session:
     finally:
         db.close()  # Siempre cierra la sesión, liberando la conexión al pool
 
-# --- 6. Función de Utilidad para Frameworks (e.g., FastAPI) ---
+# --- 5. Función de Utilidad para Frameworks (e.g., FastAPI) ---
 # Esta función es ideal para usarla como una "dependencia" en frameworks web.
-def get_db():
+def get_db() -> Generator[Session, None, None]:
     """
     Proporciona una sesión de base de datos para dependencias de frameworks (como FastAPI).
     La sesión se cierra automáticamente después de que el endpoint ha sido procesado.
@@ -97,7 +66,7 @@ def get_db():
     finally:
         db.close()
 
-# --- 7. Función para Verificar la Conexión a la Base de Datos ---
+# --- 6. Función para Verificar la Conexión a la Base de Datos ---
 # Útil para comprobar si tu aplicación puede conectarse al inicio.
 def check_database_connection():
     """
