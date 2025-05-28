@@ -1,3 +1,5 @@
+# app/services/queue_service.py
+
 # Este archivo implementa la lógica para interactuar con servicios de colas.
 # Incluye manejo de errores, reintentos, y validación de colas.
 
@@ -37,6 +39,7 @@ class QueueService:
         self.main_queue_name = "manychat-events-queue"
         self.campaign_queue_name = "manychat-campaign-queue"
         self.dlq_name = "manychat-events-dlq"
+        self.contact_queue_name = "manychat-contact-queue"
         self._ensure_queues_exist()
 
     def _ensure_queues_exist(self) -> None:
@@ -45,24 +48,27 @@ class QueueService:
         Raises:
             QueueServiceError: Si hay un error al crear las colas.
         """
-        try:
-            # Crear cola principal si no existe
-            self.client.create_queue(self.main_queue_name)
-            logger.info(f"Cola principal {self.main_queue_name} creada o verificada")
+        logger.info("Iniciando verificación/creación de colas de Azure Storage...")
 
-            # Crear cola de campañas si no existe
-            self.client.create_queue(self.campaign_queue_name)
-            logger.info(f"Cola de campañas {self.campaign_queue_name} creada o verificada")
+        queues_to_ensure = [
+            self.main_queue_name,
+            self.campaign_queue_name,
+            self.contact_queue_name,
+            self.dlq_name
+        ]
 
-            # Crear DLQ si no existe
-            self.client.create_queue(self.dlq_name)
-            logger.info(f"Cola DLQ {self.dlq_name} creada o verificada")
-        except ResourceExistsError:
-            # Es normal si las colas ya existen
-            pass
-        except Exception as e:
-            logger.error("Error al crear colas", error=str(e))
-            raise QueueServiceError(f"Error al inicializar las colas: {str(e)}")
+        for queue_name in queues_to_ensure:
+            try:
+                logger.info(f"Intentando crear/verificar cola: {queue_name}")
+                self.client.create_queue(queue_name)
+                logger.info(f"Cola {queue_name} creada o verificada exitosamente.")
+            except ResourceExistsError:
+                logger.info(f"Cola {queue_name} ya existe. Continuando.")
+            except Exception as e:
+                logger.error(f"Error CRÍTICO al crear/verificar la cola {queue_name}: {str(e)}", exc_info=True)
+                raise QueueServiceError(f"Error al inicializar la cola {queue_name}: {str(e)}")
+        
+        logger.info("Verificación/creación de todas las colas finalizada.")
 
     def _get_queue_client(self, queue_name: str) -> QueueClient:
         """
@@ -126,18 +132,18 @@ class QueueService:
                 dlq_client = self._get_queue_client(self.dlq_name)
                 dlq_client.send_message(message)
                 logger.warning("Evento enviado a DLQ",
-                             original_queue=self.main_queue_name,
-                             manychat_id=manychat_id)
+                                original_queue=self.main_queue_name,
+                                manychat_id=manychat_id)
             except Exception as dlq_error:
                 logger.error("Error al enviar a DLQ",
-                             error=str(dlq_error),
-                             manychat_id=manychat_id)
+                                error=str(dlq_error),
+                                manychat_id=manychat_id)
                 raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
 
         except Exception as e:
             logger.error("Error inesperado al encolar evento",
-                         error=str(e),
-                         manychat_id=manychat_id)
+                            error=str(e),
+                            manychat_id=manychat_id)
             raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
 
     async def send_campaign_event_to_queue(self, event_data: dict) -> None:
@@ -195,23 +201,29 @@ class QueueService:
             raise QueueServiceError(f"Error al inspeccionar cola: {str(e)}")
 
     async def receive_message(self, queue_name: str):
-        """Recibe un mensaje de la cola especificada""" [cite: 7]
+        """
+        Recibe un mensaje de la cola especificada.
+        Retorna el mensaje si lo hay, o None.
+        """
         try:
             queue_client: QueueClient = self._get_queue_client(queue_name)
-            messages = queue_client.receive_messages(max_messages=1, visibility_timeout=300) [cite: 7]
+            messages = queue_client.receive_messages(max_messages=1, visibility_timeout=300)
             for message in messages:
-                return message # Retorna el primer mensaje [cite: 7]
-            return None # No hay mensajes [cite: 7]
+                return message # Retorna el primer mensaje
+            return None # No hay mensajes
         except Exception as e:
-            logger.error(f"Error recibiendo mensaje de {queue_name}", error=str(e)) [cite: 7]
-            raise QueueServiceError(f"Error al recibir mensaje: {str(e)}") [cite: 7]
+            logger.error(f"Error recibiendo mensaje de {queue_name}", error=str(e))
+            # Envuelve la excepción para que el worker pueda manejarla
+            raise QueueServiceError(f"Error al recibir mensaje: {str(e)}")
 
     async def delete_message(self, message):
-        """Elimina un mensaje procesado de la cola""" [cite: 7]
+        """
+        Elimina un mensaje procesado de la cola.
+        El objeto 'message' ya contiene la referencia a su cola.
+        """
         try:
-            # EL message ya contiene la referencia a su cola [cite: 7]
-            message.delete() [cite: 7]
-            logger.info("Mensaje eliminado exitosamente") [cite: 7]
+            message.delete()
+            logger.info("Mensaje eliminado exitosamente")
         except Exception as e:
-            logger.error("Error eliminando mensaje", error=str(e)) [cite: 7]
-            raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}") [cite: 7]
+            logger.error("Error eliminando mensaje", error=str(e))
+            raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}")
