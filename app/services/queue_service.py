@@ -35,6 +35,7 @@ class QueueService:
             settings.AZURE_STORAGE_CONNECTION_STRING
         )
         self.main_queue_name = "manychat-events-queue"
+        self.campaign_queue_name = "manychat-campaign-queue"
         self.dlq_name = "manychat-events-dlq"
         self._ensure_queues_exist()
 
@@ -48,6 +49,10 @@ class QueueService:
             # Crear cola principal si no existe
             self.client.create_queue(self.main_queue_name)
             logger.info(f"Cola principal {self.main_queue_name} creada o verificada")
+            
+            # Crear cola de campañas si no existe
+            self.client.create_queue(self.campaign_queue_name)
+            logger.info(f"Cola de campañas {self.campaign_queue_name} creada o verificada")
             
             # Crear DLQ si no existe
             self.client.create_queue(self.dlq_name)
@@ -134,6 +139,39 @@ class QueueService:
                         error=str(e),
                         manychat_id=manychat_id)
             raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
+            
+    async def send_campaign_event_to_queue(self, event_data: dict) -> None:
+        """
+        Envía un evento de asignación de campaña a la cola de campañas.
+        
+        Args:
+            event_data: Diccionario con los datos del evento de campaña
+            
+        Raises:
+            QueueServiceError: Si hay un error al enviar el mensaje a la cola de campañas
+        """
+        manychat_id = event_data.get('manychat_id', 'unknown')
+        
+        try:
+            # Serializar el mensaje con manejo de fechas
+            message = json.dumps(event_data, default=datetime_handler)
+            
+            # Obtener cliente de la cola de campañas
+            queue_client = self._get_queue_client(self.campaign_queue_name)
+            
+            # Enviar mensaje
+            queue_client.send_message(message)
+            
+            logger.info("Evento de campaña encolado exitosamente",
+                        queue=self.campaign_queue_name,
+                        manychat_id=manychat_id,
+                        campaign_id=event_data.get('campaign_id', 'unknown'))
+
+        except Exception as e:
+            logger.error("Error inesperado al encolar evento de campaña",
+                         error=str(e),
+                         manychat_id=manychat_id)
+            raise QueueServiceError(f"Error inesperado al encolar evento de campaña: {str(e)}")
             
     async def peek_messages(self, queue_name: Optional[str] = None, max_messages: int = 32) -> list:
         """
