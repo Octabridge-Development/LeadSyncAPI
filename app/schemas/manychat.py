@@ -2,7 +2,7 @@ from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional
 
-class ManyChatWebhookEvent(BaseModel):
+class ManyChatContactEvent(BaseModel):
     manychat_id: str
     nombre_lead: str
     apellido_lead: Optional[str] = None

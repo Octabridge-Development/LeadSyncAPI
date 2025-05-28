@@ -49,11 +49,11 @@ class QueueService:
             # Crear cola principal si no existe
             self.client.create_queue(self.main_queue_name)
             logger.info(f"Cola principal {self.main_queue_name} creada o verificada")
-            
+
             # Crear cola de campañas si no existe
             self.client.create_queue(self.campaign_queue_name)
             logger.info(f"Cola de campañas {self.campaign_queue_name} creada o verificada")
-            
+
             # Crear DLQ si no existe
             self.client.create_queue(self.dlq_name)
             logger.info(f"Cola DLQ {self.dlq_name} creada o verificada")
@@ -97,28 +97,28 @@ class QueueService:
         """
         Envía un evento ManyChat a la cola para procesamiento asíncrono.
         Implementa retry logic y manejo de errores.
-        
+
         Args:
             event_data: Diccionario con los datos del evento ManyChat
-            
+
         Raises:
             QueueServiceError: Si hay un error al enviar el mensaje después de los reintentos
         """
         manychat_id = event_data.get('manychat_id', 'unknown')
-        
+
         try:
             # Serializar el mensaje con manejo de fechas
             message = json.dumps(event_data, default=datetime_handler)
-            
+
             # Obtener cliente de cola principal
             queue_client = self._get_queue_client(self.main_queue_name)
-            
+
             # Enviar mensaje
             queue_client.send_message(message)
-            
+
             logger.info("Evento encolado exitosamente",
-                       queue=self.main_queue_name,
-                       manychat_id=manychat_id)
+                        queue=self.main_queue_name,
+                        manychat_id=manychat_id)
 
         except QueueServiceError:
             # Si es un error de la cola, intentar enviar a DLQ
@@ -130,58 +130,58 @@ class QueueService:
                              manychat_id=manychat_id)
             except Exception as dlq_error:
                 logger.error("Error al enviar a DLQ",
-                           error=str(dlq_error),
-                           manychat_id=manychat_id)
+                             error=str(dlq_error),
+                             manychat_id=manychat_id)
                 raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
-            
+
         except Exception as e:
             logger.error("Error inesperado al encolar evento",
-                        error=str(e),
-                        manychat_id=manychat_id)
+                         error=str(e),
+                         manychat_id=manychat_id)
             raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
-            
+
     async def send_campaign_event_to_queue(self, event_data: dict) -> None:
         """
         Envía un evento de asignación de campaña a la cola de campañas.
-        
+
         Args:
             event_data: Diccionario con los datos del evento de campaña
-            
+
         Raises:
             QueueServiceError: Si hay un error al enviar el mensaje a la cola de campañas
         """
         manychat_id = event_data.get('manychat_id', 'unknown')
-        
+
         try:
             # Serializar el mensaje con manejo de fechas
             message = json.dumps(event_data, default=datetime_handler)
-            
+
             # Obtener cliente de la cola de campañas
             queue_client = self._get_queue_client(self.campaign_queue_name)
-            
+
             # Enviar mensaje
             queue_client.send_message(message)
-            
+
             logger.info("Evento de campaña encolado exitosamente",
-                        queue=self.campaign_queue_name,
-                        manychat_id=manychat_id,
-                        campaign_id=event_data.get('campaign_id', 'unknown'))
+                         queue=self.campaign_queue_name,
+                         manychat_id=manychat_id,
+                         campaign_id=event_data.get('campaign_id', 'unknown'))
 
         except Exception as e:
             logger.error("Error inesperado al encolar evento de campaña",
                          error=str(e),
                          manychat_id=manychat_id)
             raise QueueServiceError(f"Error inesperado al encolar evento de campaña: {str(e)}")
-            
+
     async def peek_messages(self, queue_name: Optional[str] = None, max_messages: int = 32) -> list:
         """
         Inspecciona mensajes en una cola sin eliminarlos.
         Útil para monitoreo y debugging.
-        
+
         Args:
             queue_name: Nombre de la cola a inspeccionar (default: cola principal)
             max_messages: Máximo número de mensajes a retornar
-            
+
         Returns:
             Lista de mensajes en la cola
         """
@@ -193,3 +193,25 @@ class QueueService:
         except Exception as e:
             logger.error(f"Error al inspeccionar cola {queue_name}", error=str(e))
             raise QueueServiceError(f"Error al inspeccionar cola: {str(e)}")
+
+    async def receive_message(self, queue_name: str):
+        """Recibe un mensaje de la cola especificada""" [cite: 7]
+        try:
+            queue_client: QueueClient = self._get_queue_client(queue_name)
+            messages = queue_client.receive_messages(max_messages=1, visibility_timeout=300) [cite: 7]
+            for message in messages:
+                return message # Retorna el primer mensaje [cite: 7]
+            return None # No hay mensajes [cite: 7]
+        except Exception as e:
+            logger.error(f"Error recibiendo mensaje de {queue_name}", error=str(e)) [cite: 7]
+            raise QueueServiceError(f"Error al recibir mensaje: {str(e)}") [cite: 7]
+
+    async def delete_message(self, message):
+        """Elimina un mensaje procesado de la cola""" [cite: 7]
+        try:
+            # EL message ya contiene la referencia a su cola [cite: 7]
+            message.delete() [cite: 7]
+            logger.info("Mensaje eliminado exitosamente") [cite: 7]
+        except Exception as e:
+            logger.error("Error eliminando mensaje", error=str(e)) [cite: 7]
+            raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}") [cite: 7]
