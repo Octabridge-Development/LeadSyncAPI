@@ -1,5 +1,3 @@
-# Este archivo es el punto de entrada principal de la aplicación.
-# Configura FastAPI, incluye middlewares, y monta los routers de la API.
 
 from fastapi import FastAPI
 from app.api.v1 import router as api_v1_router
