@@ -15,10 +15,10 @@ pymssql>=2.2.7
 azure-storage-queue>=12.6.0
 azure-identity>=1.13.0
 azure-keyvault-secrets>=4.7.0
-opencensus-ext-azure>=1.1.9
+azure-functions>=1.18.0
 
-# Odoo
-odoorpc>=0.8.0
+# Odoo (versión compatible)
+git+https://github.com/OCA/odoorpc.git
 
 # Utilidades
 httpx>=0.24.1
@@ -33,9 +33,5 @@ pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 pytest-mock>=3.10.0
 
-# Logging avanzado y estructurado
+# Logging estructurado
 structlog>=24.1.0
-# Rate limiting para FastAPI
-fastapi-limiter>=0.1.5
-# Redis para almacenamiento de rate limiting
-redis>=5.0.0

@@ -4,7 +4,8 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.services.odoo_service import odoo_service
+# COMENTAR TEMPORALMENTE la línea problemática:
+# from app.services.odoo_service import odoo_service
 from app.services.queue_service import QueueService
 from app.utils.monitoring import log_dependency_health
 from app.core.logging import logger
@@ -21,13 +22,15 @@ def check_database_health(db: Session):
         return f"error: {str(e)}"
 
 def check_odoo_health():
-    try:
-        odoo_service.client.version
-        return "ok"
-    except Exception as e:
-        logger.error(f"Odoo health check failed: {str(e)}")
-        log_dependency_health("odoo", "error", str(e))
-        return f"error: {str(e)}"
+    # TEMPORALMENTE DESHABILITADO
+    return "disabled - testing mode"
+    # try:
+    #     odoo_service.client.version
+    #     return "ok"
+    # except Exception as e:
+    #     logger.error(f"Odoo health check failed: {str(e)}")
+    #     log_dependency_health("odoo", "error", str(e))
+    #     return f"error: {str(e)}"
 
 def check_queue_health():
     try:
@@ -46,7 +49,7 @@ async def health_check(db: Session = Depends(get_db)):
     """
     health_status = {
         "database": check_database_health(db),
-        "odoo": check_odoo_health(),
+        "odoo": check_odoo_health(),  # Temporalmente disabled
         "queue": check_queue_health()
     }
 
