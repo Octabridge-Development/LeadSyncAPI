@@ -1,16 +1,15 @@
-# app/services/queue_service.py
-
-# Este archivo implementa la lógica para interactuar con servicios de colas.
-# Incluye manejo de errores, reintentos, y validación de colas.
+# Agrega esta línea al inicio de app/services/queue_service.py
+# junto con las otras importaciones (aproximadamente línea 6)
 
 from azure.storage.queue import QueueServiceClient, QueueClient
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 import json
-from datetime import datetime
+from datetime import datetime  # <-- AGREGAR ESTA LÍNEA
 from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import get_settings
 from app.core.logging import logger
+
 
 class QueueServiceError(Exception):
     """Excepción base para errores del QueueService."""
@@ -99,52 +98,6 @@ class QueueService:
             wait=retry_state.idle_for
         )
     )
-    async def send_event_to_queue(self, event_data: dict) -> None:
-        """
-        Envía un evento ManyChat a la cola para procesamiento asíncrono.
-        Implementa retry logic y manejo de errores.
-
-        Args:
-            event_data: Diccionario con los datos del evento ManyChat
-
-        Raises:
-            QueueServiceError: Si hay un error al enviar el mensaje después de los reintentos
-        """
-        manychat_id = event_data.get('manychat_id', 'unknown')
-
-        try:
-            # Serializar el mensaje con manejo de fechas
-            message = json.dumps(event_data, default=datetime_handler)
-
-            # Obtener cliente de cola principal
-            queue_client = self._get_queue_client(self.main_queue_name)
-
-            # Enviar mensaje
-            queue_client.send_message(message)
-
-            logger.info("Evento encolado exitosamente",
-                        queue=self.main_queue_name,
-                        manychat_id=manychat_id)
-
-        except QueueServiceError:
-            # Si es un error de la cola, intentar enviar a DLQ
-            try:
-                dlq_client = self._get_queue_client(self.dlq_name)
-                dlq_client.send_message(message)
-                logger.warning("Evento enviado a DLQ",
-                                original_queue=self.main_queue_name,
-                                manychat_id=manychat_id)
-            except Exception as dlq_error:
-                logger.error("Error al enviar a DLQ",
-                                error=str(dlq_error),
-                                manychat_id=manychat_id)
-                raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
-
-        except Exception as e:
-            logger.error("Error inesperado al encolar evento",
-                            error=str(e),
-                            manychat_id=manychat_id)
-            raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
 
     async def send_campaign_event_to_queue(self, event_data: dict) -> None:
         """
@@ -178,6 +131,62 @@ class QueueService:
                          error=str(e),
                          manychat_id=manychat_id)
             raise QueueServiceError(f"Error inesperado al encolar evento de campaña: {str(e)}")
+
+    async def send_event_to_queue(self, event_data: dict, queue_name: str = None) -> None:
+        """
+        Envía un evento ManyChat a la cola especificada para procesamiento asíncrono.
+        Implementa retry logic y manejo de errores.
+
+        Args:
+            event_data: Diccionario con los datos del evento ManyChat
+            queue_name: Nombre de la cola destino (por defecto usa main_queue_name)
+
+        Raises:
+            QueueServiceError: Si hay un error al enviar el mensaje después de los reintentos
+        """
+        # Usar cola principal si no se especifica otra
+        target_queue = queue_name or self.main_queue_name
+        manychat_id = event_data.get('manychat_id', 'unknown')
+
+        try:
+            # Serializar el mensaje con manejo de fechas
+            message = json.dumps(event_data, default=datetime_handler)
+
+            # Obtener cliente de la cola destino
+            queue_client = self._get_queue_client(target_queue)
+
+            # Enviar mensaje
+            queue_client.send_message(message)
+
+            logger.info("Evento encolado exitosamente",
+                        queue=target_queue,
+                        manychat_id=manychat_id)
+
+        except QueueServiceError:
+            # Si es un error de la cola, intentar enviar a DLQ
+            try:
+                dlq_client = self._get_queue_client(self.dlq_name)
+                dlq_message = {
+                    "original_queue": target_queue,
+                    "error_time": datetime.utcnow().isoformat(),
+                    "event_data": event_data
+                }
+                dlq_client.send_message(json.dumps(dlq_message, default=datetime_handler))
+                logger.warning("Evento enviado a DLQ",
+                                original_queue=target_queue,
+                                manychat_id=manychat_id)
+            except Exception as dlq_error:
+                logger.error("Error al enviar a DLQ",
+                                error=str(dlq_error),
+                                manychat_id=manychat_id)
+                raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
+
+        except Exception as e:
+            logger.error("Error inesperado al encolar evento",
+                            error=str(e),
+                            manychat_id=manychat_id,
+                            queue=target_queue)
+            raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
 
     async def peek_messages(self, queue_name: Optional[str] = None, max_messages: int = 32) -> list:
         """
