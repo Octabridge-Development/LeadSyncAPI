@@ -7,12 +7,6 @@
         "isEnabled": true,
         "excludedTypes": "Request"
       }
-    },
-    "logLevel": {
-      "default": "Information",
-      "Host.Results": "Information",
-      "Function": "Information",
-      "Host.Aggregator": "Information"
     }
   },
   "extensionBundle": {
@@ -23,16 +17,5 @@
     "http": {
       "routePrefix": "api"
     }
-  },
-  "customHandler": {
-    "description": {
-      "defaultExecutablePath": "python",
-      "workingDirectory": "",
-      "arguments": [
-        "-m",
-        "azure.functions_worker"
-      ]
-    },
-    "enableForwardingHttpRequest": false
   }
 }

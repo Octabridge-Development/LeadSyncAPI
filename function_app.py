@@ -1,208 +1,183 @@
-# function_app.py - VERSIÓN CORREGIDA PARA AZURE FUNCTIONS V2
+# function_app.py - VERSIÓN SIMPLE PARA AZURE FUNCTIONS
 import azure.functions as func
 import logging
 import json
 from datetime import datetime
 
-# Configurar logging básico
+# Configurar logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# Crear la Function App
+app = func.FunctionApp()
 
-# ===============================================
-# MÉTODO 1: IMPORTAR LA APP FASTAPI (RECOMENDADO)
-# ===============================================
 
-def create_fastapi_function_app():
-    """
-    Intenta cargar la aplicación FastAPI y exponerla como Azure Function.
-    """
+@app.route(route="health", auth_level=func.AuthLevel.ANONYMOUS, methods=["GET"])
+def health_check(req: func.HttpRequest) -> func.HttpResponse:
+    """Health check básico"""
+    logger.info("Health check solicitado")
+
+    return func.HttpResponse(
+        json.dumps({
+            "status": "healthy",
+            "service": "MiaSalud Integration API",
+            "timestamp": datetime.utcnow().isoformat(),
+            "python_version": "3.10.17",
+            "azure_functions": "OK"
+        }),
+        status_code=200,
+        headers={"Content-Type": "application/json"}
+    )
+
+
+@app.route(route="webhook/manychat/contact", auth_level=func.AuthLevel.ANONYMOUS, methods=["POST"])
+def manychat_contact_webhook(req: func.HttpRequest) -> func.HttpResponse:
+    """Webhook para contactos ManyChat"""
     try:
-        logger.info("🔄 Intentando cargar aplicación FastAPI...")
+        logger.info("Webhook ManyChat recibido")
 
-        # Importar la aplicación FastAPI
-        from app.main import app as fastapi_app
+        # Verificar API Key
+        api_key = req.headers.get('X-API-KEY')
+        expected_key = "Miasaludnatural123**"
 
-        logger.info("✅ FastAPI aplicación cargada exitosamente")
-
-        # Crear AsgiFunctionApp que expone toda la FastAPI app
-        function_app = func.AsgiFunctionApp(
-            app=fastapi_app,
-            http_auth_level=func.AuthLevel.ANONYMOUS
-        )
-
-        logger.info("✅ AsgiFunctionApp configurado correctamente")
-        return function_app
-
-    except ImportError as e:
-        logger.error(f"❌ Error importando FastAPI app: {str(e)}")
-        return None
-    except Exception as e:
-        logger.error(f"❌ Error inesperado cargando FastAPI: {str(e)}")
-        return None
-
-
-# ===============================================
-# MÉTODO 2: ENDPOINTS AZURE FUNCTIONS DIRECTOS
-# ===============================================
-
-def create_direct_function_app():
-    """
-    Crea Azure Functions directas como fallback si FastAPI no se puede cargar.
-    """
-    logger.info("🔄 Creando Azure Functions directas como fallback...")
-
-    # Crear Function App básica
-    function_app = func.FunctionApp()
-
-    @function_app.route(route="health", auth_level=func.AuthLevel.ANONYMOUS)
-    def health_check(req: func.HttpRequest) -> func.HttpResponse:
-        """Health check básico"""
-        try:
+        if not api_key or api_key != expected_key:
+            logger.warning("API Key inválido")
             return func.HttpResponse(
-                json.dumps({
-                    "status": "healthy",
-                    "service": "MiaSalud Integration API",
-                    "mode": "Azure Functions Direct",
-                    "timestamp": datetime.utcnow().isoformat()
-                }),
-                status_code=200,
-                headers={"Content-Type": "application/json"}
-            )
-        except Exception as e:
-            logger.error(f"Error en health check: {str(e)}")
-            return func.HttpResponse(
-                json.dumps({"error": str(e)}),
-                status_code=500,
+                json.dumps({"error": "API Key inválido o faltante"}),
+                status_code=401,
                 headers={"Content-Type": "application/json"}
             )
 
-    @function_app.route(route="webhook/manychat/contact", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
-    def manychat_contact_webhook(req: func.HttpRequest) -> func.HttpResponse:
-        """Webhook directo para contactos ManyChat"""
+        # Obtener datos del request
         try:
-            # Verificar API Key
-            api_key = req.headers.get('X-API-KEY')
-            expected_key = "Miasaludnatural123**"  # Desde tu .env
+            event_data = req.get_json()
+            logger.info(f"Datos recibidos: {event_data}")
+        except ValueError as e:
+            logger.error(f"JSON inválido: {str(e)}")
+            return func.HttpResponse(
+                json.dumps({"error": "JSON inválido"}),
+                status_code=400,
+                headers={"Content-Type": "application/json"}
+            )
 
-            if not api_key or api_key != expected_key:
+        # Validar campos requeridos
+        required_fields = ['manychat_id', 'nombre_lead', 'ultimo_estado']
+        for field in required_fields:
+            if not event_data.get(field):
+                logger.error(f"Campo faltante: {field}")
                 return func.HttpResponse(
-                    json.dumps({"error": "API Key inválido o faltante"}),
-                    status_code=401,
-                    headers={"Content-Type": "application/json"}
-                )
-
-            # Obtener datos del request
-            try:
-                event_data = req.get_json()
-            except ValueError:
-                return func.HttpResponse(
-                    json.dumps({"error": "JSON inválido"}),
+                    json.dumps({"error": f"Campo requerido faltante: {field}"}),
                     status_code=400,
                     headers={"Content-Type": "application/json"}
                 )
 
-            # Validar campos requeridos
-            required_fields = ['manychat_id', 'nombre_lead', 'ultimo_estado']
-            for field in required_fields:
-                if not event_data.get(field):
-                    return func.HttpResponse(
-                        json.dumps({"error": f"Campo requerido faltante: {field}"}),
-                        status_code=400,
-                        headers={"Content-Type": "application/json"}
-                    )
+        # Procesar evento
+        manychat_id = event_data.get('manychat_id')
+        nombre = event_data.get('nombre_lead')
+        estado = event_data.get('ultimo_estado')
 
-            # Log del evento recibido
-            logger.info(f"📨 Evento ManyChat recibido: {event_data.get('manychat_id')}")
+        logger.info(f"Procesando evento - ID: {manychat_id}, Nombre: {nombre}, Estado: {estado}")
 
-            # TODO: Aquí podrías agregar lógica para encolar el mensaje
-            # Por ahora, solo respondemos exitosamente
+        # TODO: Aquí irá la lógica de procesamiento (colas, base de datos, etc.)
 
-            return func.HttpResponse(
-                json.dumps({
-                    "status": "accepted",
-                    "message": "Evento recibido exitosamente",
-                    "manychat_id": event_data.get('manychat_id'),
-                    "mode": "direct_function"
-                }),
-                status_code=202,
-                headers={"Content-Type": "application/json"}
-            )
+        # Respuesta exitosa
+        response_data = {
+            "status": "accepted",
+            "message": "Evento recibido y procesado exitosamente",
+            "manychat_id": manychat_id,
+            "processed_at": datetime.utcnow().isoformat()
+        }
 
-        except Exception as e:
-            logger.error(f"Error procesando webhook ManyChat: {str(e)}")
-            return func.HttpResponse(
-                json.dumps({"error": "Error interno del servidor"}),
-                status_code=500,
-                headers={"Content-Type": "application/json"}
-            )
+        logger.info(f"Evento procesado exitosamente: {manychat_id}")
 
-    @function_app.route(route="docs", auth_level=func.AuthLevel.ANONYMOUS)
-    def api_docs(req: func.HttpRequest) -> func.HttpResponse:
-        """Documentación básica de la API"""
-        docs_html = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>MiaSalud Integration API - Azure Functions</title>
-            <style>
-                body { font-family: Arial, sans-serif; margin: 40px; }
-                .endpoint { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }
-                .method { color: #007acc; font-weight: bold; }
-            </style>
-        </head>
-        <body>
-            <h1>🚀 MiaSalud Integration API</h1>
-            <p>Ejecutándose en Azure Functions - Modo Direct</p>
+        return func.HttpResponse(
+            json.dumps(response_data),
+            status_code=202,
+            headers={"Content-Type": "application/json"}
+        )
 
-            <h2>Endpoints Disponibles:</h2>
-
-            <div class="endpoint">
-                <span class="method">GET</span> <code>/api/health</code><br>
-                <small>Health check básico del sistema</small>
-            </div>
-
-            <div class="endpoint">
-                <span class="method">POST</span> <code>/api/webhook/manychat/contact</code><br>
-                <small>Webhook para recibir eventos de contacto de ManyChat</small><br>
-                <small><strong>Requiere:</strong> Header X-API-KEY</small>
-            </div>
-
-            <h2>Autenticación:</h2>
-            <p>Todos los endpoints (excepto /health y /docs) requieren el header:</p>
-            <code>X-API-KEY: Miasaludnatural123**</code>
-
-            <h2>Estado del Sistema:</h2>
-            <ul>
-                <li>✅ Azure Functions: Activo</li>
-                <li>🔄 FastAPI: Intentando cargar...</li>
-                <li>🔄 Base de datos: Por verificar</li>
-            </ul>
-        </body>
-        </html>
-        """
-
-        return func.HttpResponse(docs_html, mimetype="text/html")
-
-    logger.info("✅ Azure Functions directas configuradas")
-    return function_app
+    except Exception as e:
+        logger.error(f"Error inesperado: {str(e)}")
+        return func.HttpResponse(
+            json.dumps({"error": "Error interno del servidor"}),
+            status_code=500,
+            headers={"Content-Type": "application/json"}
+        )
 
 
-# ===============================================
-# LÓGICA PRINCIPAL DE CREACIÓN DE LA APP
-# ===============================================
+@app.route(route="docs", auth_level=func.AuthLevel.ANONYMOUS, methods=["GET"])
+def api_docs(req: func.HttpRequest) -> func.HttpResponse:
+    """Documentación de la API"""
+    docs_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MiaSalud Integration API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+        .container { background: white; padding: 30px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .endpoint { background: #f8f9fa; padding: 15px; margin: 15px 0; border-radius: 5px; border-left: 4px solid #007acc; }
+        .method { color: #007acc; font-weight: bold; font-size: 14px; }
+        .url { font-family: monospace; background: #e9ecef; padding: 2px 6px; border-radius: 3px; }
+        .status { padding: 4px 8px; border-radius: 12px; font-size: 12px; }
+        .success { background: #d4edda; color: #155724; }
+        .warning { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 MiaSalud Integration API</h1>
+        <p>API para integración entre ManyChat, Odoo y Azure SQL</p>
 
-logger.info("🚀 Iniciando MiaSalud Integration API en Azure Functions...")
+        <div class="status success">✅ Azure Functions: Activo</div>
+        <div class="status warning">🔄 FastAPI: En desarrollo</div>
 
-# Intentar primero el método FastAPI
-app = create_fastapi_function_app()
+        <h2>📋 Endpoints Disponibles</h2>
 
-# Si falla, usar Azure Functions directas
-if app is None:
-    logger.warning("⚠️ FastAPI no disponible, usando Azure Functions directas")
-    app = create_direct_function_app()
+        <div class="endpoint">
+            <span class="method">GET</span> <span class="url">/api/health</span><br>
+            <small><strong>Descripción:</strong> Verifica el estado del sistema</small><br>
+            <small><strong>Autenticación:</strong> No requerida</small>
+        </div>
 
-logger.info("✅ Aplicación configurada y lista")
+        <div class="endpoint">
+            <span class="method">POST</span> <span class="url">/api/webhook/manychat/contact</span><br>
+            <small><strong>Descripción:</strong> Recibe eventos de contacto desde ManyChat</small><br>
+            <small><strong>Autenticación:</strong> Header X-API-KEY requerido</small><br>
+            <small><strong>Content-Type:</strong> application/json</small>
+        </div>
 
-# IMPORTANTE: La variable 'app' debe estar disponible a nivel módulo
-# para que Azure Functions la pueda detectar
+        <div class="endpoint">
+            <span class="method">GET</span> <span class="url">/api/docs</span><br>
+            <small><strong>Descripción:</strong> Esta documentación</small><br>
+            <small><strong>Autenticación:</strong> No requerida</small>
+        </div>
+
+        <h2>🔐 Autenticación</h2>
+        <p>Para endpoints protegidos, incluye el header:</p>
+        <div class="url">X-API-KEY: Miasaludnatural123**</div>
+
+        <h2>📖 Ejemplo de uso</h2>
+        <pre style="background: #f8f9fa; padding: 15px; border-radius: 5px; overflow-x: auto;">
+    curl -X POST https://tu-function-app.azurewebsites.net/api/webhook/manychat/contact \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-KEY: Miasaludnatural123**" \\
+  -d '{
+    "manychat_id": "123456789",
+    "nombre_lead": "Juan Pérez",
+    "ultimo_estado": "Nuevo Lead"
+  }'
+        </pre>
+
+        <hr style="margin: 30px 0;">
+        <small>MiaSalud Integration API v1.0 - Powered by Azure Functions</small>
+    </div>
+</body>
+</html>
+    """
+
+    return func.HttpResponse(docs_html, mimetype="text/html")
+
+
+# Log de inicialización
+logger.info("🚀 MiaSalud Integration API inicializada correctamente")
