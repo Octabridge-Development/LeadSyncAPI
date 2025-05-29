@@ -4,8 +4,6 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel
 
-# ... (otras clases BaseModel que ya tengas, si las hay)
-
 class ManyChatContactEvent(BaseModel):
     """
     Define el esquema para un evento de contacto de ManyChat.
@@ -21,4 +19,15 @@ class ManyChatContactEvent(BaseModel):
     canal_entrada: Optional[str] = None
     estado_inicial: Optional[str] = None
 
-# ... (otras clases BaseModel que ya tengas, si las las hay)
+# 🔧 AGREGAR ESTA CLASE FALTANTE:
+class ManyChatCampaignAssignmentEvent(BaseModel):
+    """
+    Define el esquema para eventos de asignación de campaña de ManyChat.
+    """
+    manychat_id: str
+    campaign_id: str
+    comercial_id: Optional[str] = None
+    medico_id: Optional[str] = None
+    datetime_actual: datetime
+    ultimo_estado: str
+    tipo_asignacion: str = "comercial"
