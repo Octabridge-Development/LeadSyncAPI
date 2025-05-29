@@ -1,41 +1,36 @@
-# API Framework
-fastapi~=0.115.12
+# ===== API FRAMEWORK =====
+fastapi>=0.100.0
 uvicorn>=0.22.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 python-dotenv>=1.0.0
 python-multipart>=0.0.6
 
-# Base de datos
+# ===== DATABASE =====
 sqlalchemy>=2.0.0
 pyodbc>=4.0.39
-pymssql>=2.2.7
 
-# Azure
+# ===== AZURE SERVICES =====
 azure-storage-queue>=12.6.0
 azure-identity>=1.13.0
 azure-keyvault-secrets>=4.7.0
-opencensus-ext-azure>=1.1.9
 
-# Odoo
+# ===== ODOO =====
+# Usar versión específica que funciona
 odoorpc>=0.8.0
 
-# Utilidades
+# ===== UTILITIES =====
 httpx>=0.24.1
 tenacity>=8.2.2
-python-jose>=3.3.0
-passlib>=1.7.4
 email-validator>=2.0.0
 
-# Testing
+# ===== LOGGING =====
+structlog>=24.1.0
+
+# ===== COMPATIBILITY =====
+typing-extensions>=4.8.0
+
+# ===== TESTING =====
 pytest>=7.3.1
 pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
-pytest-mock>=3.10.0
-
-# Logging avanzado y estructurado
-structlog>=24.1.0
-# Rate limiting para FastAPI
-fastapi-limiter>=0.1.5
-# Redis para almacenamiento de rate limiting
-redis>=5.0.0
+requests>=2.31.0
