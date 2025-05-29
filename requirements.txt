@@ -1,3 +1,7 @@
+# Azure Functions - OBLIGATORIO PARA V2
+azure-functions>=1.18.0
+azure-functions-worker>=4.0.0
+
 # API Framework
 fastapi~=0.115.12
 uvicorn>=0.22.0
@@ -11,11 +15,10 @@ sqlalchemy>=2.0.0
 pyodbc>=4.0.39
 pymssql>=2.2.7
 
-# Azure
+# Azure Services
 azure-storage-queue>=12.6.0
 azure-identity>=1.13.0
 azure-keyvault-secrets>=4.7.0
-azure-functions>=1.18.0
 
 # Odoo (versión compatible)
 git+https://github.com/OCA/odoorpc.git
@@ -27,11 +30,11 @@ python-jose>=3.3.0
 passlib>=1.7.4
 email-validator>=2.0.0
 
-# Testing
+# Logging estructurado
+structlog>=24.1.0
+
+# Testing (solo para dev)
 pytest>=7.3.1
 pytest-asyncio>=0.21.0
 pytest-cov>=4.1.0
 pytest-mock>=3.10.0
-
-# Logging estructurado
-structlog>=24.1.0

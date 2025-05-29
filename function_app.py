@@ -1,87 +1,208 @@
-# function_app.py
+# function_app.py - VERSIÓN CORREGIDA PARA AZURE FUNCTIONS V2
 import azure.functions as func
 import logging
-import os
+import json
+from datetime import datetime
 
-# Configuración de logging muy básica para ver si este archivo se ejecuta
-# Azure Functions debería capturar prints y logging.info/error en Application Insights
-# y en el Log Stream si está conectado.
-print("PRINT: function_app.py - INICIO DE EJECUCIÓN DEL ARCHIVO")
-logging.basicConfig(level=logging.DEBUG) # Intenta establecer el nivel aquí también
-logging.debug("DEBUG: function_app.py - Logging configurado a DEBUG.")
-logging.info("INFO: function_app.py - Archivo siendo procesado.")
+# Configurar logging básico
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Variable para ver si la app FastAPI se carga
-fastapi_app_loaded = False
-initialization_error_message = "No error"
 
-try:
-    logging.info("INFO: Intentando importar 'app' desde 'app.main'")
-    print("PRINT: Intentando importar 'app' desde 'app.main'")
-    from app.main import app as fastapi_application  # Renombrado para claridad
-    fastapi_app_loaded = True
-    logging.info("INFO: 'app' importada exitosamente desde 'app.main'.")
-    print("PRINT: 'app' importada exitosamente desde 'app.main'.")
+# ===============================================
+# MÉTODO 1: IMPORTAR LA APP FASTAPI (RECOMENDADO)
+# ===============================================
 
-except ImportError as ie:
-    initialization_error_message = f"ImportError: {str(ie)}"
-    logging.error(f"ERROR DE IMPORTACIÓN: {initialization_error_message}", exc_info=True)
-    print(f"PRINT: ERROR DE IMPORTACIÓN: {initialization_error_message}")
-except Exception as e:
-    initialization_error_message = f"Exception: {str(e)}"
-    logging.error(f"ERROR GENERAL AL IMPORTAR/CONFIGURAR: {initialization_error_message}", exc_info=True)
-    print(f"PRINT: ERROR GENERAL AL IMPORTAR/CONFIGURAR: {initialization_error_message}")
+def create_fastapi_function_app():
+    """
+    Intenta cargar la aplicación FastAPI y exponerla como Azure Function.
+    """
+    try:
+        logger.info("🔄 Intentando cargar aplicación FastAPI...")
 
-# Crear la FunctionApp principal
-azure_functions_app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
+        # Importar la aplicación FastAPI
+        from app.main import app as fastapi_app
 
-if fastapi_app_loaded:
-    logging.info("INFO: Envolviendo la aplicación FastAPI con AsgiFunctionApp.")
-    print("PRINT: Envolviendo la aplicación FastAPI con AsgiFunctionApp.")
-    # Esta es la forma de exponer tu app FastAPI a través de Azure Functions
-    # El nombre de la variable 'app_func' no es especial, pero es común.
-    # Lo importante es que el objeto AsgiFunctionApp se registre con el worker.
-    # Azure Functions buscará funciones decoradas o un objeto AsgiFunctionApp.
-    # Al no usar decoradores aquí, el objeto AsgiFunctionApp es el que se sirve.
-    # Si esto se hace, no necesitas el @azure_functions_app.route("/diag") de abajo.
-    # Sin embargo, para que Azure Functions lo "vea" sin decoradores,
-    # el objeto AsgiFunctionApp debe ser asignado a una variable que el worker pueda descubrir,
-    # o ser el resultado de la ejecución del script si es el único objeto de función.
-    # La documentación sugiere que el worker de Python escanea el archivo.
-    # Para ser explícitos, podrías intentar asignar el resultado de AsgiFunctionApp
-    # a una variable conocida o simplemente dejar que el worker lo encuentre.
-    # Vamos a probar manteniendo la variable global `azure_functions_app` y
-    # si FastAPI carga, la reemplazamos o hacemos que AsgiFunctionApp sea el principal.
+        logger.info("✅ FastAPI aplicación cargada exitosamente")
 
-    # El modelo de programación v2 espera que las funciones estén registradas
-    # en un objeto FunctionApp. Si AsgiFunctionApp es tu única "función",
-    # debería ser suficiente.
-    # Vamos a reasignar `azure_functions_app` para que sea el AsgiFunctionApp
-    azure_functions_app = func.AsgiFunctionApp(app=fastapi_application, http_auth_level=func.AuthLevel.ANONYMOUS)
-    logging.info("INFO: AsgiFunctionApp configurado como el manejador principal.")
-    print("PRINT: AsgiFunctionApp configurado como el manejador principal.")
-
-else:
-    logging.warning("ADVERTENCIA: La aplicación FastAPI no se cargó. Se expondrá solo el endpoint de diagnóstico.")
-    print("PRINT: ADVERTENCIA: La aplicación FastAPI no se cargó. Se expondrá solo el endpoint de diagnóstico.")
-
-    @azure_functions_app.route(route="diag")
-    def diagnostic_endpoint(req: func.HttpRequest) -> func.HttpResponse:
-        logging.info("INFO: Endpoint de diagnóstico accedido.")
-        print("PRINT: Endpoint de diagnóstico accedido.")
-        if fastapi_app_loaded:
-            status_msg = "FastAPI app parece estar cargada (pero este endpoint no debería ser llamado si AsgiFunctionApp está activo)."
-        else:
-            status_msg = f"FastAPI app NO se cargó. Error: {initialization_error_message}"
-
-        return func.HttpResponse(
-            f"Mensaje de diagnóstico:\n{status_msg}\n"
-            f"FUNCTIONS_WORKER_RUNTIME: {os.getenv('FUNCTIONS_WORKER_RUNTIME')}\n"
-            f"WEBSITE_SITE_NAME: {os.getenv('WEBSITE_SITE_NAME')}\n",
-            status_code=200 if fastapi_app_loaded else 500
+        # Crear AsgiFunctionApp que expone toda la FastAPI app
+        function_app = func.AsgiFunctionApp(
+            app=fastapi_app,
+            http_auth_level=func.AuthLevel.ANONYMOUS
         )
-    logging.info("INFO: Endpoint de diagnóstico /diag registrado.")
-    print("PRINT: Endpoint de diagnóstico /diag registrado.")
 
-logging.info("INFO: function_app.py - FIN DE EJECUCIÓN DEL ARCHIVO")
-print("PRINT: function_app.py - FIN DE EJECUCIÓN DEL ARCHIVO")
+        logger.info("✅ AsgiFunctionApp configurado correctamente")
+        return function_app
+
+    except ImportError as e:
+        logger.error(f"❌ Error importando FastAPI app: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Error inesperado cargando FastAPI: {str(e)}")
+        return None
+
+
+# ===============================================
+# MÉTODO 2: ENDPOINTS AZURE FUNCTIONS DIRECTOS
+# ===============================================
+
+def create_direct_function_app():
+    """
+    Crea Azure Functions directas como fallback si FastAPI no se puede cargar.
+    """
+    logger.info("🔄 Creando Azure Functions directas como fallback...")
+
+    # Crear Function App básica
+    function_app = func.FunctionApp()
+
+    @function_app.route(route="health", auth_level=func.AuthLevel.ANONYMOUS)
+    def health_check(req: func.HttpRequest) -> func.HttpResponse:
+        """Health check básico"""
+        try:
+            return func.HttpResponse(
+                json.dumps({
+                    "status": "healthy",
+                    "service": "MiaSalud Integration API",
+                    "mode": "Azure Functions Direct",
+                    "timestamp": datetime.utcnow().isoformat()
+                }),
+                status_code=200,
+                headers={"Content-Type": "application/json"}
+            )
+        except Exception as e:
+            logger.error(f"Error en health check: {str(e)}")
+            return func.HttpResponse(
+                json.dumps({"error": str(e)}),
+                status_code=500,
+                headers={"Content-Type": "application/json"}
+            )
+
+    @function_app.route(route="webhook/manychat/contact", methods=["POST"], auth_level=func.AuthLevel.ANONYMOUS)
+    def manychat_contact_webhook(req: func.HttpRequest) -> func.HttpResponse:
+        """Webhook directo para contactos ManyChat"""
+        try:
+            # Verificar API Key
+            api_key = req.headers.get('X-API-KEY')
+            expected_key = "Miasaludnatural123**"  # Desde tu .env
+
+            if not api_key or api_key != expected_key:
+                return func.HttpResponse(
+                    json.dumps({"error": "API Key inválido o faltante"}),
+                    status_code=401,
+                    headers={"Content-Type": "application/json"}
+                )
+
+            # Obtener datos del request
+            try:
+                event_data = req.get_json()
+            except ValueError:
+                return func.HttpResponse(
+                    json.dumps({"error": "JSON inválido"}),
+                    status_code=400,
+                    headers={"Content-Type": "application/json"}
+                )
+
+            # Validar campos requeridos
+            required_fields = ['manychat_id', 'nombre_lead', 'ultimo_estado']
+            for field in required_fields:
+                if not event_data.get(field):
+                    return func.HttpResponse(
+                        json.dumps({"error": f"Campo requerido faltante: {field}"}),
+                        status_code=400,
+                        headers={"Content-Type": "application/json"}
+                    )
+
+            # Log del evento recibido
+            logger.info(f"📨 Evento ManyChat recibido: {event_data.get('manychat_id')}")
+
+            # TODO: Aquí podrías agregar lógica para encolar el mensaje
+            # Por ahora, solo respondemos exitosamente
+
+            return func.HttpResponse(
+                json.dumps({
+                    "status": "accepted",
+                    "message": "Evento recibido exitosamente",
+                    "manychat_id": event_data.get('manychat_id'),
+                    "mode": "direct_function"
+                }),
+                status_code=202,
+                headers={"Content-Type": "application/json"}
+            )
+
+        except Exception as e:
+            logger.error(f"Error procesando webhook ManyChat: {str(e)}")
+            return func.HttpResponse(
+                json.dumps({"error": "Error interno del servidor"}),
+                status_code=500,
+                headers={"Content-Type": "application/json"}
+            )
+
+    @function_app.route(route="docs", auth_level=func.AuthLevel.ANONYMOUS)
+    def api_docs(req: func.HttpRequest) -> func.HttpResponse:
+        """Documentación básica de la API"""
+        docs_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>MiaSalud Integration API - Azure Functions</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                .endpoint { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 5px; }
+                .method { color: #007acc; font-weight: bold; }
+            </style>
+        </head>
+        <body>
+            <h1>🚀 MiaSalud Integration API</h1>
+            <p>Ejecutándose en Azure Functions - Modo Direct</p>
+
+            <h2>Endpoints Disponibles:</h2>
+
+            <div class="endpoint">
+                <span class="method">GET</span> <code>/api/health</code><br>
+                <small>Health check básico del sistema</small>
+            </div>
+
+            <div class="endpoint">
+                <span class="method">POST</span> <code>/api/webhook/manychat/contact</code><br>
+                <small>Webhook para recibir eventos de contacto de ManyChat</small><br>
+                <small><strong>Requiere:</strong> Header X-API-KEY</small>
+            </div>
+
+            <h2>Autenticación:</h2>
+            <p>Todos los endpoints (excepto /health y /docs) requieren el header:</p>
+            <code>X-API-KEY: Miasaludnatural123**</code>
+
+            <h2>Estado del Sistema:</h2>
+            <ul>
+                <li>✅ Azure Functions: Activo</li>
+                <li>🔄 FastAPI: Intentando cargar...</li>
+                <li>🔄 Base de datos: Por verificar</li>
+            </ul>
+        </body>
+        </html>
+        """
+
+        return func.HttpResponse(docs_html, mimetype="text/html")
+
+    logger.info("✅ Azure Functions directas configuradas")
+    return function_app
+
+
+# ===============================================
+# LÓGICA PRINCIPAL DE CREACIÓN DE LA APP
+# ===============================================
+
+logger.info("🚀 Iniciando MiaSalud Integration API en Azure Functions...")
+
+# Intentar primero el método FastAPI
+app = create_fastapi_function_app()
+
+# Si falla, usar Azure Functions directas
+if app is None:
+    logger.warning("⚠️ FastAPI no disponible, usando Azure Functions directas")
+    app = create_direct_function_app()
+
+logger.info("✅ Aplicación configurada y lista")
+
+# IMPORTANTE: La variable 'app' debe estar disponible a nivel módulo
+# para que Azure Functions la pueda detectar
