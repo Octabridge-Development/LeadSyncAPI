@@ -1,6 +1,4 @@
 # app/services/queue_service.py
-
-# CAMBIO: Importar las versiones asíncronas
 from azure.storage.queue.aio import QueueServiceClient, QueueClient # CAMBIO AQUÍ
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 import json
