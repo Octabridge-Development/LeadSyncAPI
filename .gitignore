@@ -1,4 +1,16 @@
-# Python cache files
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Archivos de Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.so
+
+# Otros archivos comunes
+.env
+.DS_Store
