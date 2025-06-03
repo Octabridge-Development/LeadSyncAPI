@@ -53,5 +53,12 @@ yarn-error.log
 *.sqlite
 *.db
 
+# Tests
+/tests/__pycache__/
+/tests/*.pyc
+/tests/*.pyo
+/tests/*.pyd
+/tests/.pytest_cache/
+
 # Directorios de docker
 .docker/

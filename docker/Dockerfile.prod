@@ -1,0 +1,68 @@
+# Etapa de compilación
+FROM python:3.11-slim AS builder
+
+# Instalar dependencias del sistema necesarias para compilación
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    libpq-dev \
+    unixodbc \
+    unixodbc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configurar directorio de trabajo
+WORKDIR /app
+
+# Copiar requirements y instalar dependencias Python
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+# Etapa de producción
+FROM python:3.11-slim
+
+# Instalar solo las dependencias de runtime necesarias
+RUN apt-get update && apt-get install -y \
+    curl \
+    libpq-dev \
+    unixodbc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Crear usuario no-root
+RUN useradd --create-home --shell /bin/bash app
+
+# Configurar directorio de trabajo
+WORKDIR /app
+
+# Copiar las dependencias instaladas desde la etapa de builder
+COPY --from=builder /usr/local/lib/python3.11/site-packages/ /usr/local/lib/python3.11/site-packages/
+COPY --from=builder /usr/local/bin/ /usr/local/bin/
+
+# Copiar código de la aplicación
+COPY app/ ./app/
+COPY workers/ ./workers/
+
+# Instalar y configurar ODBC Driver
+COPY docker/msodbcsql18_18.3.2.1-1_amd64.deb .
+RUN apt-get update && apt-get install -y ./msodbcsql18_18.3.2.1-1_amd64.deb && \
+    rm msodbcsql18_18.3.2.1-1_amd64.deb && \
+    rm -rf /var/lib/apt/lists/*
+
+# Cambiar a usuario no-root
+RUN chown -R app:app /app
+USER app
+
+# Exponer puerto
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Variables de entorno de producción
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/home/app/.local/bin:$PATH"
+
+# Comando por defecto
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
