@@ -1,0 +1,110 @@
+services:
+  # Base de datos SQL Server para desarrollo
+  database:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: miasalud_database
+    environment:
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "MiaSalud123**"
+      MSSQL_PID: "Developer"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "MiaSalud123**" -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 60s
+    networks:
+      - miasalud_network
+
+  # Redis para colas (alternativa a Azure Storage en desarrollo)
+  redis:
+    image: redis:7-alpine
+    container_name: miasalud_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - miasalud_network
+
+  # API FastAPI
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: miasalud_api
+    environment:
+      - DEBUG=true
+      - API_KEY=Miasaludnatural123**
+      - DATABASE_URL=mssql+pyodbc://sa:MiaSalud123**@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=devstorageaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstorageaccount1;QueueEndpoint=http://127.0.0.1:10001/devstorageaccount1;
+      - ODOO_URL=https://ironsolutionbd.odoo.com
+      - ODOO_DB=ironsolutionbd
+      - ODOO_USERNAME=sistemas@miasaludnatural.com
+      - ODOO_PASSWORD=Mia123**
+    volumes:
+      - ./app:/app/app
+      - ./workers:/app/workers
+    ports:
+      - "8000:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - miasalud_network
+
+  # Workers de procesamiento
+  workers:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workers
+    container_name: miasalud_workers
+    environment:
+      - DEBUG=true
+      - DATABASE_URL=mssql+pyodbc://sa:MiaSalud123**@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
+      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=devstorageaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstorageaccount1;QueueEndpoint=http://127.0.0.1:10001/devstorageaccount1;
+    volumes:
+      - ./app:/app/app
+      - ./workers:/app/workers
+    depends_on:
+      - api
+      - database
+      - redis
+    networks:
+      - miasalud_network
+
+  # Azurite para emular Azure Storage en desarrollo
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    container_name: miasalud_azurite
+    ports:
+      - "10000:10000" # Blob service
+      - "10001:10001" # Queue service
+      - "10002:10002" # Table service
+    volumes:
+      - azurite_data:/data
+    command: azurite --loose --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
+    networks:
+      - miasalud_network
+
+volumes:
+  sqlserver_data:
+  redis_data:
+  azurite_data:
+
+networks:
+  miasalud_network:
+    driver: bridge
