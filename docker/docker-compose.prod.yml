@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.prod
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - API_KEY=${API_KEY}
+      - DEBUG=false
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - miasalud_prod
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  workers:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.workers
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - DEBUG=false
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - miasalud_prod
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  miasalud_prod:
+    name: miasalud_prod
+    external: true

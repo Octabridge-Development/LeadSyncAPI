@@ -2,6 +2,7 @@
 # Utiliza Pydantic para manejar variables de entorno y Azure Key Vault para secretos sensibles.
 # Proporciona la clase Settings y la función get_settings para acceder a la configuración.
 
+import os
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from pydantic import Field, AnyHttpUrl
@@ -33,7 +34,7 @@ class Settings(BaseSettings):
 
     # Configuración para cargar desde .env
     model_config = {
-        "env_file": ".env",
+        "env_file": os.getenv("ENV_FILE", ".env"),
         "env_file_encoding": "utf-8"
     }
 
@@ -51,7 +52,9 @@ class Settings(BaseSettings):
             self.DATABASE_URL = client.get_secret("DATABASE-URL").value
 
 @lru_cache()
-def get_settings():
+def get_settings() -> Settings:
+    """Obtiene una instancia cacheada de la configuración."""
     settings = Settings()
-    settings.load_secrets_from_key_vault()
+    if settings.USE_KEY_VAULT:
+        settings.load_secrets_from_key_vault()
     return settings
