@@ -1,4 +1,4 @@
-# app/api/v1/endpoints/manychat.py (VERSIÓN CORREGIDA)
+# app/api/v1/endpoints/manychat.py
 
 from fastapi import APIRouter, status, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
@@ -112,10 +112,10 @@ async def receive_contact_event(
                 detail="manychat_id no puede estar vacío"
             )
 
-        # 🔧 CORREGIDO: Usar send_message en lugar de send_event_to_queue
-        await queue_service.send_message(
+        # Enviar evento a la cola de contactos
+        await queue_service.send_event_to_queue(
             event.dict(),
-            queue_name=queue_service.contact_queue_name  # También usar la propiedad correcta
+            queue_name="manychat-contact-queue"
         )
 
         # Respuesta exitosa
@@ -123,7 +123,7 @@ async def receive_contact_event(
             "status": "accepted",
             "message": "Evento de contacto encolado exitosamente",
             "manychat_id": event.manychat_id,
-            "queue": queue_service.contact_queue_name
+            "queue": "manychat-contact-queue"
         }
 
     except QueueServiceError as e:
@@ -235,11 +235,8 @@ async def receive_campaign_assignment(
                 detail="campaign_id no puede estar vacío"
             )
 
-        # 🔧 CORREGIDO: Usar send_message para consistencia
-        await queue_service.send_message(
-            event.dict(),
-            queue_name=queue_service.campaign_queue_name
-        )
+        # Enviar evento a la cola de campañas
+        await queue_service.send_campaign_event_to_queue(event.dict())
 
         # Respuesta exitosa
         return {
@@ -247,7 +244,7 @@ async def receive_campaign_assignment(
             "message": "Evento de campaña encolado exitosamente",
             "manychat_id": event.manychat_id,
             "campaign_id": event.campaign_id,
-            "queue": queue_service.campaign_queue_name
+            "queue": "manychat-campaign-queue"
         }
 
     except QueueServiceError as e:
