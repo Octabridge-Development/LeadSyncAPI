@@ -62,3 +62,5 @@ yarn-error.log
 
 # Directorios de docker
 .docker/
+
+.env
