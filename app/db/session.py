@@ -1,6 +1,5 @@
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from contextlib import contextmanager
 from app.core.config import get_settings
 from typing import Generator
