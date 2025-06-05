@@ -1,10 +1,12 @@
 # tests/test_campaign_flow.py
+from datetime import datetime, date
 """
 Test de flujo completo para campañas: inserción, procesamiento y verificación de CampaignContact.
 """
 import pytest
 import asyncio
 from app.services.queue_service import QueueService
+from app.services.azure_sql_service import AzureSQLService
 from app.db.session import get_db_session
 from app.db.models import CampaignContact, Campaign, Contact, Advisor, Channel, ContactState
 from app.schemas.manychat import ManyChatCampaignAssignmentEvent
@@ -12,12 +14,11 @@ from sqlalchemy import select
 
 @pytest.mark.asyncio
 async def test_campaign_assignment_flow():
-    queue_service = QueueService()
-    await queue_service._ensure_queues_exist()
+    queue_service = QueueService(skip_queue_init=True)
     # --- LIMPIEZA: eliminar datos previos para idempotencia y evitar errores de FK ---
     with get_db_session() as db:
         db.query(CampaignContact).delete()
-        db.query(Campaign).filter(Campaign.name == "test-campaign-001").delete()
+        db.query(Campaign).delete()  # Borra todos los Campaigns primero para evitar FK
         # Eliminar todos los ContactState de los Contact que referencian el Channel de prueba
         channel_ids = [c.id for c in db.query(Channel).filter(Channel.name == "Test Channel").all()]
         if channel_ids:
@@ -41,13 +42,13 @@ async def test_campaign_assignment_flow():
         db.add(contact)
         db.commit()
         db.refresh(contact)
-        # Crear Campaign dummy con channel_id válido
-        campaign = Campaign(name="test-campaign-001", date_start="2025-06-01", date_end="2025-06-30", status="active", channel_id=channel.id)
+        # Crear Campaign dummy con nombre único
+        campaign = Campaign(name="test-campaign-001", date_start=datetime(2025,6,1), date_end=datetime(2025,6,30), status="active", channel_id=channel.id)
         db.add(campaign)
         db.commit()
         db.refresh(campaign)
         # Crear Advisor dummy
-        advisor = Advisor(name="Test Advisor", email="test@advisor.com", role="comercial", status="active")
+        advisor = Advisor(name="Test Advisor", email="test@advisor.com", role="comercial")
         db.add(advisor)
         db.commit()
         db.refresh(advisor)
@@ -59,14 +60,17 @@ async def test_campaign_assignment_flow():
     # --- ENVÍO EVENTO ---
     event = {
         "manychat_id": "test-lead-001",
-        "campaign_id": str(campaign_id),
+        "campaign_id": campaign.name,  # Usar el nombre, no el ID
         "comercial_id": str(advisor_id),
         "datetime_actual": "2025-06-03T12:00:00Z",
         "ultimo_estado": "asignado",
         "tipo_asignacion": "manual"
     }
-    await queue_service.send_message(event, queue_service.campaign_queue_name)
-    await asyncio.sleep(5)
+    await queue_service.send_campaign_event_to_queue(event)
+    # Simular procesamiento del evento como lo haría el worker
+    azure_sql_service = AzureSQLService()
+    event_obj = ManyChatCampaignAssignmentEvent(**event)
+    await azure_sql_service.process_campaign_event(event_obj)
     # --- VERIFICACIÓN ---
     with get_db_session() as db:
         result = db.execute(

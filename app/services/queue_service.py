@@ -27,7 +27,7 @@ class QueueService:
     Servicio para enviar y recibir eventos de la cola de Azure Storage Queue.
     Implementa manejo de errores, retries y Dead Letter Queue.
     """
-    def __init__(self):
+    def __init__(self, skip_queue_init: bool = False):
         settings = get_settings()
         self.client = QueueServiceClient.from_connection_string(
             settings.AZURE_STORAGE_CONNECTION_STRING
@@ -36,7 +36,8 @@ class QueueService:
         self.campaign_queue_name = "manychat-campaign-queue"
         self.dlq_name = "manychat-events-dlq"
         self.contact_queue_name = "manychat-contact-queue"
-        self._ensure_queues_exist()
+        if not skip_queue_init:
+            self._ensure_queues_exist()
 
     def _ensure_queues_exist(self) -> None:
         """

@@ -2,9 +2,11 @@
 .venv/
 venv/
 env/
+.venv
 
 # Archivos de Python
 __pycache__/
+__pycache__
 *.pyc
 *.pyo
 *.pyd
@@ -14,6 +16,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+__init__.cpython
+*.egg
 
 # Archivos de entorno y configuración
 .env
@@ -64,3 +68,40 @@ yarn-error.log
 .docker/
 
 .env
+# Ignora archivos y carpetas de caché de Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+*.log
+
+# Ignora entornos virtuales
+.venv/
+venv/
+ENV/
+env/
+
+# Ignora archivos de configuración de VSCode
+.vscode/
+
+# Ignora archivos de pruebas y cobertura
+.coverage
+htmlcov/
+.cache/
+.pytest_cache/
+
+# Ignora archivos de base de datos y secretos
+*.sqlite3
+*.db
+.env
+.env.*
+secrets.json
+
+# Ignora archivos temporales de sistema
+.DS_Store
+Thumbs.db

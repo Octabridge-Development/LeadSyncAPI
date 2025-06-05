@@ -3,6 +3,7 @@ from sqlalchemy import or_
 from app.db.models import Contact, ContactState, Channel, Campaign, Advisor, CampaignContact # Importa los nuevos modelos [cite: 10]
 from typing import Optional, Dict, Any
 import logging
+from datetime import datetime, date
 
 class ContactRepository:
     def __init__(self, db: Session):
@@ -78,8 +79,14 @@ class CampaignRepository: # Agregado [cite: 5]
         """Get campaign by name or create if it doesn't exist."""
         campaign = self.db.query(Campaign).filter(Campaign.name == name).first()
         if not campaign:
-            # Aquí podrías añadir más campos por defecto o requeridos para Campaign
-            campaign = Campaign(name=name, date_start=datetime.utcnow().date(), status="active") # Ejemplo
+            # Siempre usar datetime.datetime, nunca date
+            now = datetime.utcnow()
+            campaign = Campaign(
+                name=name,
+                date_start=now,
+                date_end=None,
+                status="active"
+            )
             self.db.add(campaign)
             self.db.commit()
             self.db.refresh(campaign)
