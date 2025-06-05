@@ -2,7 +2,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 from app.db.models import Contact, ContactState, Channel, Campaign, Advisor, CampaignContact # Importa los nuevos modelos [cite: 10]
 from typing import Optional, Dict, Any
-import logging
+from datetime import datetime
+
 
 class ContactRepository:
     def __init__(self, db: Session):
