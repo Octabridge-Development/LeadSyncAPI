@@ -443,3 +443,4 @@ docker-compose exec api python -c "from app.db.session import check_database_con
 ```bash
 docker-compose logs workers | grep "Processing"
 ```
+cambios nuevos 
