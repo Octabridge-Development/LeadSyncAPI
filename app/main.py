@@ -101,7 +101,6 @@ async def health_check():
     }
 
 
-# Evento de inicio
 @app.on_event("startup")
 async def startup_event():
     """
@@ -130,7 +129,6 @@ async def startup_event():
     logger.info("✅ API iniciada exitosamente")
 
 
-# Evento de cierre
 @app.on_event("shutdown")
 async def shutdown_event():
     """
