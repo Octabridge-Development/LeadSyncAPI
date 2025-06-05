@@ -1,10 +1,7 @@
-# Agrega esta línea al inicio de app/services/queue_service.py
-# junto con las otras importaciones (aproximadamente línea 6)
-
 from azure.storage.queue import QueueServiceClient, QueueClient
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 import json
-from datetime import datetime  # <-- AGREGAR ESTA LÍNEA
+from datetime import datetime
 from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import get_settings
@@ -27,7 +24,7 @@ def datetime_handler(obj):
 
 class QueueService:
     """
-    Servicio para enviar eventos ManyChat a la cola de Azure Storage Queue.
+    Servicio para enviar y recibir eventos de la cola de Azure Storage Queue.
     Implementa manejo de errores, retries y Dead Letter Queue.
     """
     def __init__(self):
@@ -98,7 +95,6 @@ class QueueService:
             wait=retry_state.idle_for
         )
     )
-
     async def send_campaign_event_to_queue(self, event_data: dict) -> None:
         """
         Envía un evento de asignación de campaña a la cola de campañas.
@@ -122,9 +118,9 @@ class QueueService:
             queue_client.send_message(message)
 
             logger.info("Evento de campaña encolado exitosamente",
-                         queue=self.campaign_queue_name,
-                         manychat_id=manychat_id,
-                         campaign_id=event_data.get('campaign_id', 'unknown'))
+                        queue=self.campaign_queue_name,
+                        manychat_id=manychat_id,
+                        campaign_id=event_data.get('campaign_id', 'unknown'))
 
         except Exception as e:
             logger.error("Error inesperado al encolar evento de campaña",
@@ -162,7 +158,7 @@ class QueueService:
                         queue=target_queue,
                         manychat_id=manychat_id)
 
-        except QueueServiceError:
+        except QueueServiceError: # Este catch es para errores específicos de QueueService
             # Si es un error de la cola, intentar enviar a DLQ
             try:
                 dlq_client = self._get_queue_client(self.dlq_name)
@@ -181,7 +177,7 @@ class QueueService:
                                 manychat_id=manychat_id)
                 raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
 
-        except Exception as e:
+        except Exception as e: # Este catch es para cualquier otro error inesperado
             logger.error("Error inesperado al encolar evento",
                             error=str(e),
                             manychat_id=manychat_id,
@@ -218,21 +214,25 @@ class QueueService:
             queue_client: QueueClient = self._get_queue_client(queue_name)
             messages = queue_client.receive_messages(max_messages=1, visibility_timeout=300)
             for message in messages:
-                return message # Retorna el primer mensaje
+                return message # Retorna el primer mensaje (el objeto QueueMessage completo)
             return None # No hay mensajes
         except Exception as e:
             logger.error(f"Error recibiendo mensaje de {queue_name}", error=str(e))
-            # Envuelve la excepción para que el worker pueda manejarla
             raise QueueServiceError(f"Error al recibir mensaje: {str(e)}")
 
-    async def delete_message(self, message):
+    # MÉTODO DELETE_MESSAGE CORREGIDO
+    def delete_message(self, queue_name: str, message_id: str, pop_receipt: str) -> None:
         """
-        Elimina un mensaje procesado de la cola.
-        El objeto 'message' ya contiene la referencia a su cola.
+        Elimina un mensaje procesado de la cola especificada.
+        Args:
+            queue_name: El nombre de la cola de la que se elimina el mensaje.
+            message_id: El ID del mensaje a eliminar.
+            pop_receipt: El pop_receipt del mensaje a eliminar.
         """
         try:
-            message.delete()
-            logger.info("Mensaje eliminado exitosamente")
+            queue_client = self._get_queue_client(queue_name)
+            queue_client.delete_message(message_id, pop_receipt)
+            logger.info(f"Mensaje (ID: {message_id}) eliminado exitosamente de la cola '{queue_name}'.")
         except Exception as e:
-            logger.error("Error eliminando mensaje", error=str(e))
+            logger.error(f"Error eliminando mensaje (ID: {message_id}) de la cola '{queue_name}': {e}", exc_info=True)
             raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}")
