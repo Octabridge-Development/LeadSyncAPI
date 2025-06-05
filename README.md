@@ -443,3 +443,132 @@ docker-compose exec api python -c "from app.db.session import check_database_con
 ```bash
 docker-compose logs workers | grep "Processing"
 ```
+
+
+Endpoints Funcionales (API FastAPI)
+Tu API FastAPI ahora expone endpoints específicos para recibir webhooks de ManyChat, asegurando la autenticación mediante una clave API (X-API-KEY).
+
+URL Base de la API (Local): http://localhost:8000
+
+Autenticación Requerida: Para todas las peticiones a los endpoints /api/v1/manychat/webhook/*, es obligatorio incluir un encabezado X-API-KEY con tu clave secreta.
+
+Tu Clave API: Miasaludnatural123**
+
+¡Excelente! Es fundamental documentar todo el progreso y las soluciones para referencia futura. Aquí tienes un resumen detallado de lo que hemos avanzado y confirmado:
+
+Documentación de Avance: Configuración y Prueba de Webhooks ManyChat en LeadSyncAPI
+Hemos configurado, depurado y validado el flujo completo para la recepción de webhooks de ManyChat, su procesamiento asíncrono a través de colas de Azure Storage, y la persistencia de datos en Azure SQL Database.
+
+1. Endpoints Funcionales (API FastAPI)
+Tu API FastAPI ahora expone endpoints específicos para recibir webhooks de ManyChat, asegurando la autenticación mediante una clave API (X-API-KEY).
+
+URL Base de la API (Local): http://localhost:8000
+
+Autenticación Requerida: Para todas las peticiones a los endpoints /api/v1/manychat/webhook/*, es obligatorio incluir un encabezado X-API-KEY con tu clave secreta.
+
+Tu Clave API: Miasaludnatural123**
+2. Cuerpos de los JSON para Peticiones (Ejemplos Probados Exitosamente)
+A continuación, se detallan los cuerpos JSON y los encabezados utilizados para probar exitosamente cada endpoint.
+
+2.1. Webhook de Contactos (manychat-contact-queue)
+Este endpoint recibe eventos relacionados con actualizaciones de contacto de ManyChat y los encola para procesamiento posterior.
+
+URL del Endpoint: http://localhost:8000/api/v1/manychat/webhook/contact
+Método HTTP: POST
+Headers de la Petición:
+Content-Type: application/json
+X-API-KEY: Miasaludnatural123**
+Cuerpo JSON de Ejemplo (Probado y Confirmado):
+JSON
+
+{
+    "manychat_id": "test_contact_456",
+    "nombre_lead": "Test Contact Data",
+    "datetime_actual": "2025-06-05T12:41:36Z", // Ejemplo de fecha/hora (cambia cada vez)
+    "ultimo_estado": "Nuevo",
+    "id": "1234567890_manychat_id",
+    "first_name": "Test",
+    "last_name": "Data",
+    "phone": "+56912345678",
+    "email": "test.data@example.com"
+}
+Respuesta Exitosa Esperada (Ejemplo de la API):
+JSON
+
+{
+    "status": "accepted",
+    "message": "Webhook received and event queued",
+    "manychat_id": "test_contact_456",
+    "queue": "manychat-contact-queue"
+}
+Flujo de Procesamiento Confirmado:
+La API recibe el evento.
+Lo envía a la cola de Azure Storage: manychat-contact-queue.
+El worker contact_processor.py consume el mensaje.
+AzureSQLService guarda los datos del contacto en la tabla dbo.Contact de Azure SQL Database.
+El mensaje es eliminado exitosamente de la cola.
+2.2. Webhook de Asignación de Campañas (manychat-campaign-queue)
+Este endpoint gestiona la asignación de contactos a campañas, encolando los eventos para su procesamiento.
+
+URL del Endpoint: http://localhost:8000/api/v1/manychat/webhook/campaign-assignment
+Método HTTP: POST
+Headers de la Petición:
+Content-Type: application/json
+X-API-KEY: Miasaludnatural123**
+Cuerpo JSON de Ejemplo (Probado y Confirmado):
+JSON
+
+{
+    "manychat_id": "test_contact_456",
+    "campaign_id": "CAMP-ABC-123",
+    "comercial_id": "COM-XYZ-001",
+    "datetime_actual": "2025-06-05T12:45:00Z", // Ejemplo de fecha/hora (cambia cada vez)
+    "ultimo_estado": "Asignado",
+    "tipo_asignacion": "Automatica"
+}
+Respuesta Exitosa Esperada (Ejemplo de la API):
+JSON
+
+{
+    "status": "accepted",
+    "message": "Evento de campaña encolado exitosamente",
+    "manychat_id": "test_contact_456",
+    "campaign_id": "CAMP-ABC-123",
+    "queue": "manychat-campaign-queue"
+}
+Flujo de Procesamiento Confirmado:
+La API recibe el evento.
+Lo envía a la cola de Azure Storage: manychat-campaign-queue.
+El worker campaign_assignment_processor.py consume el mensaje.
+AzureSQLService guarda los datos de la asignación de campaña en la tabla dbo.Campaign_Contact de Azure SQL Database (asumiendo que las IDs de campaña y comercial/asesor existen en sus tablas correspondientes).
+El mensaje es eliminado exitosamente de la cola.
+3. Documentación Interactiva de la API (Swagger UI / OpenAPI)
+No puedo generar capturas de pantalla directamente, pero tu API FastAPI proporciona una excelente documentación interactiva de forma automática.
+
+Cómo Acceder:
+Asegúrate de que tu API FastAPI está ejecutándose localmente (por ejemplo, con uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload).
+Abre tu navegador web y navega a la siguiente URL: http://localhost:8000/docs
+Qué Verás:
+Verás una interfaz de Swagger UI (o redoc si usas /redoc) que lista todos tus endpoints.
+Podrás expandir cada endpoint para ver su método HTTP, la URL completa, la descripción y los esquemas JSON esperados (Request Body) y las posibles respuestas (Response).
+La sección de "Schemas" en la parte inferior te mostrará la estructura detallada de los modelos Pydantic, como ManyChatContactEvent y ManyChatCampaignAssignmentEvent, incluyendo qué campos son obligatorios.
+Puedes usar la función "Try it out" (Pruébalo) directamente en la interfaz de Swagger para enviar peticiones. Necesitarás hacer clic en "Authorize" en la parte superior derecha para introducir tu clave API (Miasaludnatural123**) en el campo X-API-KEY.
+4. Resumen de la Arquitectura Probada
+El sistema implementado y verificado ahora sigue el siguiente flujo de datos para eventos de ManyChat:
+
+ManyChat Webhook (→) FastAPI API (→) Azure Storage Queue (→) Workers (→) Azure SQL Database
+
+ManyChat Webhook: Envía eventos (contacto, campaña) a tu API.
+FastAPI API:
+Recibe las peticiones POST.
+Requiere autenticación por X-API-KEY.
+Valida los cuerpos JSON contra esquemas Pydantic.
+Encola los eventos en colas dedicadas de Azure Storage.
+Azure Storage Queue:
+manychat-contact-queue: Para eventos de contacto.
+manychat-campaign-queue: Para eventos de asignación de campaña.
+Workers (Consumidores):
+contact_processor.py: Consume de manychat-contact-queue, procesa el contacto y lo guarda en dbo.Contact.
+campaign_assignment_processor.py: Consume de manychat-campaign-queue, procesa la asignación y la guarda en dbo.Campaign_Contact.
+Azure SQL Database: Almacena los datos persistentes de contactos y asignaciones.
+Además, hemos asegurado que los secretos (como la cadena de conexión de Azure Storage) estén gestionados correctamente mediante el uso del archivo .env (localmente) y que este archivo esté excluido del control de versiones de Git a través de .gitignore, habiendo limpiado el historial del repositorio.
