@@ -1,6 +1,6 @@
 # app/db/models.py (VERSIÓN FINAL CORREGIDA PARA RELACIONES AMBIGUAS)
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.session import Base
@@ -104,3 +104,61 @@ class SyncLog(Base):
 
     def __repr__(self):
         return f"<SyncLog(id={self.id}, status='{self.status}', created_at='{self.created_at}')>"
+
+# --- Modelo Campaign ---
+class Campaign(Base):
+    __tablename__ = "Campaign"
+    id = Column(Integer, primary_key=True, index=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    date_start = Column(DateTime, nullable=False)
+    date_end = Column(DateTime, nullable=False)
+    budget = Column(Integer, nullable=True)
+    status = Column(String(50), nullable=False)
+    channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=False)
+
+    channel = relationship("Channel", backref="campaigns")
+    contacts = relationship("CampaignContact", back_populates="campaign")
+
+    def __repr__(self):
+        return f"<Campaign(id={self.id}, name='{self.name}')>"
+
+# --- Modelo Advisor ---
+class Advisor(Base):
+    __tablename__ = "Advisor"
+    id = Column(Integer, primary_key=True, index=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    email = Column(String(255), nullable=False)
+    phone = Column(String(50), nullable=True)
+    role = Column(String(50), nullable=False)
+    status = Column(String(50), nullable=False)
+    genre = Column(String(20), nullable=True)
+    odoo_id = Column(String(100), nullable=True)
+
+    campaign_contacts_commercial = relationship("CampaignContact", back_populates="commercial_advisor", foreign_keys='CampaignContact.commercial_advisor_id')
+    campaign_contacts_medical = relationship("CampaignContact", back_populates="medical_advisor", foreign_keys='CampaignContact.medical_advisor_id')
+
+    def __repr__(self):
+        return f"<Advisor(id={self.id}, name='{self.name}')>"
+
+# --- Modelo CampaignContact ---
+class CampaignContact(Base):
+    __tablename__ = "Campaign_Contact"
+    __table_args__ = (
+        UniqueConstraint('campaign_id', 'contact_id', name='uq_campaign_contact'),
+    )
+    id = Column(Integer, primary_key=True, index=True, nullable=False)
+    campaign_id = Column(Integer, ForeignKey("Campaign.id"), nullable=False)
+    contact_id = Column(Integer, ForeignKey("Contact.id"), nullable=False)
+    commercial_advisor_id = Column(Integer, ForeignKey("Advisor.id"), nullable=True)
+    medical_advisor_id = Column(Integer, ForeignKey("Advisor.id"), nullable=True)
+    registration_date = Column(DateTime, nullable=False, server_default=func.now())
+    last_state = Column(String(50), nullable=True)
+    lead_state = Column(String(50), nullable=True)
+
+    campaign = relationship("Campaign", back_populates="contacts")
+    contact = relationship("Contact")
+    commercial_advisor = relationship("Advisor", foreign_keys=[commercial_advisor_id], back_populates="campaign_contacts_commercial")
+    medical_advisor = relationship("Advisor", foreign_keys=[medical_advisor_id], back_populates="campaign_contacts_medical")
+
+    def __repr__(self):
+        return f"<CampaignContact(id={self.id}, campaign_id={self.campaign_id}, contact_id={self.contact_id})>"
