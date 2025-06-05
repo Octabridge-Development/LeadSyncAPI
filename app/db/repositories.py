@@ -1,9 +1,12 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from app.db.models import Contact, ContactState, Channel, Campaign, Advisor, CampaignContact # Importa los nuevos modelos [cite: 10]
-from typing import Optional, Dict, Any
+# Asegúrate de importar datetime y timezone aquí
+from datetime import datetime, timezone # <--- AÑADE O ASEGÚRATE DE ESTA LÍNEA
 import logging
 from datetime import datetime, date
+
+from app.db.models import Contact, ContactState, Channel, Campaign, Advisor, CampaignContact # Importa todos los modelos necesarios
+from typing import Optional, Dict, Any
 
 class ContactRepository:
     def __init__(self, db: Session):
@@ -70,15 +73,35 @@ class ChannelRepository:
             self.db.refresh(channel)
         return channel
 
-# --- Nuevos Repositorios (Tarea A2) ---
-class CampaignRepository: # Agregado [cite: 5]
+# --- Repositorios para Campañas ---
+class CampaignRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_or_create_by_name(self, name: str) -> Campaign: # Agregado [cite: 5]
+    def get_campaign_by_name(self, name: str) -> Optional[Campaign]:
+        """Helper to get campaign by name"""
+        return self.db.query(Campaign).filter(Campaign.name == name).first()
+
+    def create_campaign(self, name: str) -> Campaign:
+        """Create a new campaign with default values."""
+        new_campaign = Campaign(
+            name=name,
+            # Usar datetime.now(timezone.utc) para un objeto datetime consciente del huso horario
+            date_start=datetime.now(timezone.utc),
+            status="active", # Puedes ajustar el valor por defecto si es necesario
+            budget=0.0, # <--- AÑADIDO: Inicializar budget ya que existe en la DB
+            # channel_id = None # Puedes añadirlo si siempre debe tener un valor inicial o se toma de algún lugar
+        )
+        self.db.add(new_campaign)
+        self.db.commit()
+        self.db.refresh(new_campaign)
+        return new_campaign
+
+    def get_or_create_by_name(self, name: str) -> Campaign:
         """Get campaign by name or create if it doesn't exist."""
-        campaign = self.db.query(Campaign).filter(Campaign.name == name).first()
+        campaign = self.get_campaign_by_name(name)
         if not campaign:
+<<<<<<< HEAD
             # Siempre usar datetime.datetime, nunca date
             now = datetime.utcnow()
             campaign = Campaign(
@@ -90,31 +113,32 @@ class CampaignRepository: # Agregado [cite: 5]
             self.db.add(campaign)
             self.db.commit()
             self.db.refresh(campaign)
+=======
+            logging.info(f"Campaña '{name}' no encontrada. Creando nueva campaña.")
+            campaign = self.create_campaign(name) # Llama a la nueva función create_campaign
+>>>>>>> aed482550ac07ce92ea389bdfd1ae01c0b4b9838
         return campaign
 
-class AdvisorRepository: # Agregado [cite: 5]
+class AdvisorRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def get_by_id_or_email(self, identifier: str) -> Optional[Advisor]: # Agregado [cite: 5]
+    def get_by_id_or_email(self, identifier: str) -> Optional[Advisor]:
         """Get advisor by ID or email."""
         try:
-            # Intenta convertir a int para buscar por ID
             advisor_id = int(identifier)
             return self.db.query(Advisor).filter(Advisor.id == advisor_id).first()
         except ValueError:
-            # Si no es un int, busca por email o nombre
             return self.db.query(Advisor).filter(
                 or_(Advisor.email == identifier, Advisor.name == identifier)
             ).first()
 
-class CampaignContactRepository: # Agregado [cite: 5]
+class CampaignContactRepository:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_or_update_assignment(self, data: Dict[str, Any]) -> CampaignContact: # Agregado [cite: 5]
+    def create_or_update_assignment(self, data: Dict[str, Any]) -> CampaignContact:
         """Create new CampaignContact or update existing one (UPSERT)."""
-        # Busca por contact_id y campaign_id para evitar duplicados de asignación
         existing = self.db.query(CampaignContact).filter(
             CampaignContact.contact_id == data["contact_id"],
             CampaignContact.campaign_id == data["campaign_id"]
