@@ -220,3 +220,23 @@ class QueueService:
         except Exception as e:
             logger.error(f"Error eliminando mensaje '{message_id}' de la cola '{queue_name}'", error=str(e), exc_info=True)
             raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}")
+
+    # --- LOGGING DETALLADO: Añadir logs en cada método crítico y al crear colas ---
+    # --- TESTING: Añadir método de test para envío/recepción de mensajes ---
+
+    async def test_queue_roundtrip(self, queue_name: str = None, test_payload: dict = None):
+        """
+        Prueba de envío y recepción de mensajes en la cola especificada.
+        """
+        queue_name = queue_name or self.main_queue_name
+        test_payload = test_payload or {"test": "ok", "timestamp": str(datetime.now(timezone.utc))}
+        logger.info(f"[TEST] Enviando mensaje de prueba a la cola '{queue_name}'...")
+        await self.send_message(test_payload, queue_name)
+        logger.info(f"[TEST] Mensaje enviado. Intentando recibir...")
+        msg = await self.receive_message(queue_name)
+        if msg:
+            logger.info(f"[TEST] Mensaje recibido: {msg.content}")
+            await self.delete_message(queue_name, msg.id, msg.pop_receipt)
+            logger.info(f"[TEST] Mensaje eliminado correctamente.")
+        else:
+            logger.warning(f"[TEST] No se recibió ningún mensaje de la cola '{queue_name}'.")

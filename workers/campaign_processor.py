@@ -23,6 +23,7 @@ Ejemplo de mensaje esperado en la cola:
 """
 import asyncio
 import json
+from datetime import datetime, timezone
 from app.services.queue_service import QueueService, QueueServiceError
 from app.services.azure_sql_service import AzureSQLService
 from app.schemas.manychat import ManyChatCampaignAssignmentEvent
@@ -33,33 +34,56 @@ def _log_start():
 
 async def process_campaign_messages():
     """
-    Consume mensajes de la cola de campañas y procesa eventos de asignación de campaña.
-
-    - Lee mensajes en lotes de la cola 'manychat-campaign-queue'.
-    - Convierte el contenido a ManyChatCampaignAssignmentEvent.
-    - Llama a AzureSQLService para procesar el evento.
-    - Elimina el mensaje de la cola si se procesa correctamente.
-    - Registra errores y continúa el procesamiento.
-
-    Corre en bucle infinito con un pequeño delay entre iteraciones.
+    Worker para procesar eventos de campañas desde la cola manychat-campaign-queue.
+    - Procesa mensajes en lotes.
+    - Llama a AzureSQLService.process_campaign_event().
+    - Maneja errores y envía a DLQ.
     """
     queue_service = QueueService()
     azure_sql_service = AzureSQLService()
-    queue_client = queue_service.client.get_queue_client(queue_service.campaign_queue_name)
+    await queue_service._ensure_queues_exist()
     _log_start()
     while True:
-        messages = queue_client.receive_messages(messages_per_page=10, visibility_timeout=30)
-        for msg_batch in messages.by_page():
-            for msg in msg_batch:
-                try:
-                    event_data = json.loads(msg.content)
-                    event = ManyChatCampaignAssignmentEvent(**event_data)
-                    await azure_sql_service.process_campaign_event(event)
-                    queue_client.delete_message(msg)
-                    logger.info("Mensaje de campaña procesado y eliminado", manychat_id=event.manychat_id)
-                except Exception as e:
-                    logger.error("Error procesando mensaje de campaña", error=str(e), raw=msg.content)
-        await asyncio.sleep(2)
+        try:
+            queue_client = queue_service._get_queue_client(queue_service.campaign_queue_name)
+            messages = queue_client.receive_messages(messages_per_page=10, visibility_timeout=30)
+            async for msg_batch in messages.by_page():
+                async for msg in msg_batch:
+                    try:
+                        event_data = json.loads(msg.content)
+                        event = ManyChatCampaignAssignmentEvent(**event_data)
+                        await azure_sql_service.process_campaign_event(event)
+                        await queue_client.delete_message(msg)
+                        logger.info(f"Mensaje de campaña procesado y eliminado", extra={"manychat_id": event.manychat_id})
+                    except json.JSONDecodeError as e:
+                        logger.error(f"Error al decodificar JSON del mensaje: {e}. Contenido: {msg.content}")
+                        error_payload = {
+                            "error_type": "JSONDecodeError",
+                            "error_message": str(e),
+                            "original_message": msg.content,
+                            "timestamp": str(datetime.now(timezone.utc))
+                        }
+                        await queue_service.send_message(error_payload, queue_service.dlq_name)
+                        logger.warning(f"Mensaje inválido movido a DLQ.")
+                        await queue_client.delete_message(msg)
+                    except Exception as e:
+                        logger.error(f"Error procesando mensaje de campaña: {str(e)}", exc_info=True)
+                        error_payload = {
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                            "original_message": msg.content,
+                            "timestamp": str(datetime.now(timezone.utc))
+                        }
+                        await queue_service.send_message(error_payload, queue_service.dlq_name)
+                        logger.warning(f"Mensaje movido a DLQ por error de procesamiento.")
+                        await queue_client.delete_message(msg)
+            await asyncio.sleep(2)
+        except QueueServiceError as e:
+            logger.error(f"Error de QueueService en el worker: {str(e)}", exc_info=True)
+            await asyncio.sleep(10)
+        except Exception as e:
+            logger.error(f"Error inesperado en el loop principal del worker: {str(e)}", exc_info=True)
+            await asyncio.sleep(10)
 
 if __name__ == "__main__":
     asyncio.run(process_campaign_messages())

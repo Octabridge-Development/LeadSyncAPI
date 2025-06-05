@@ -1,8 +1,9 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from app.db.models import Contact, ContactState, Channel
+from app.db.models import Contact, ContactState, Channel, CampaignContact, Campaign, Advisor
 from typing import Optional, Dict, Any
 import logging
+from datetime import datetime
 
 class ContactRepository:
     def __init__(self, db: Session):
@@ -68,3 +69,40 @@ class ChannelRepository:
             self.db.commit()
             self.db.refresh(channel)
         return channel
+
+class CampaignContactRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def get_by_campaign_and_contact(self, campaign_id: int, contact_id: int) -> Optional[CampaignContact]:
+        return self.db.query(CampaignContact).filter(
+            CampaignContact.campaign_id == campaign_id,
+            CampaignContact.contact_id == contact_id
+        ).first()
+
+    def create_or_update(self, campaign_id: int, contact_id: int, commercial_advisor_id: int = None, medical_advisor_id: int = None, last_state: str = None, lead_state: str = None) -> CampaignContact:
+        existing = self.get_by_campaign_and_contact(campaign_id, contact_id)
+        if existing:
+            if commercial_advisor_id is not None:
+                existing.commercial_advisor_id = commercial_advisor_id
+            if medical_advisor_id is not None:
+                existing.medical_advisor_id = medical_advisor_id
+            if last_state is not None:
+                existing.last_state = last_state
+            if lead_state is not None:
+                existing.lead_state = lead_state
+            campaign_contact = existing
+        else:
+            campaign_contact = CampaignContact(
+                campaign_id=campaign_id,
+                contact_id=contact_id,
+                commercial_advisor_id=commercial_advisor_id,
+                medical_advisor_id=medical_advisor_id,
+                last_state=last_state,
+                lead_state=lead_state,
+                registration_date=datetime.utcnow()  # Workaround para SQL Server
+            )
+            self.db.add(campaign_contact)
+        self.db.commit()
+        self.db.refresh(campaign_contact)
+        return campaign_contact
