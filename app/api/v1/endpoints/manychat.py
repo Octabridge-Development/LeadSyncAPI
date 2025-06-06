@@ -2,12 +2,21 @@
 
 from fastapi import APIRouter, status, Depends, Request, HTTPException
 from fastapi.responses import JSONResponse
-from typing import Dict, Any
+from typing import Dict, Any, Optional # Asegúrate de importar Optional y datetime
+from datetime import datetime # Importa datetime para typing en el endpoint si lo necesitas, aunque el esquema ya lo maneja
 
+# Importaciones de tus esquemas y servicios existentes
 from app.schemas.manychat import ManyChatContactEvent, ManyChatCampaignAssignmentEvent
 from app.services.queue_service import QueueService, QueueServiceError
 from app.api.deps import get_queue_service, verify_api_key
 from app.core.logging import logger
+
+# --- ¡Nuevas importaciones necesarias para el endpoint PUT! ---
+from sqlalchemy.orm import Session # Importa Session para sesiones sincrónicas
+from app.schemas.campaign_contact import CampaignContactUpdate # Tu nuevo esquema
+from app.services.campaign_contact_service import CampaignContactService # Tu nuevo servicio
+from app.db.session import get_db # Tu función para obtener la sesión de DB
+# -------------------------------------------------------------
 
 router = APIRouter(
     prefix="/manychat",
@@ -312,3 +321,92 @@ async def verify_webhook(
             "/api/v1/manychat/webhook/campaign-assignment"
         ]
     }
+
+
+# --- ¡INICIA EL NUEVO ENDPOINT PUT AQUÍ! ---
+@router.put(
+    "/campaign-contacts/update-by-manychat-id", # Ruta del nuevo endpoint
+    summary="Actualizar Campaign_Contact por ManyChat ID",
+    description="""
+    Actualiza un registro de Campaign_Contact asociado a un Contacto
+    usando su ManyChat ID. Permite actualizar el ID del asesor médico,
+    la fecha de asignación del médico y el último estado.
+    Este endpoint se ejecuta de manera SÍNCRONA con la base de datos.
+    """,
+    response_model=CampaignContactUpdate, # El modelo de respuesta puede ser el mismo que el de entrada
+                                         # si solo quieres confirmar los datos actualizados.
+                                         # Si quieres el objeto completo de CampaignContact,
+                                         # necesitarías un esquema de respuesta dedicado para CampaignContact.
+    status_code=status.HTTP_200_OK,
+    tags=["Campaigns", "ManyChat Integration"] # Tags para organizar en la documentación de Swagger/OpenAPI
+)
+def update_campaign_contact_endpoint( # Ya no es 'async def'
+    campaign_contact_data: CampaignContactUpdate, 
+    db: Session = Depends(get_db), # Cambiado a Session
+    api_key: str = Depends(verify_api_key) # Añadido el api_key como dependencia también para este endpoint
+):
+    """
+    Endpoint para actualizar campos específicos de un registro de Campaign_Contact.
+
+    Args:
+        campaign_contact_data (CampaignContactUpdate): Objeto Pydantic con los datos
+                                                      para la actualización, incluyendo
+                                                      el ManyChat ID del contacto.
+        db (Session): Sesión de base de datos sincrónica inyectada por FastAPI.
+        api_key (str): Dependencia para verificar la API Key (proporcionada por ManyChat o un sistema externo).
+
+    Returns:
+        CampaignContactUpdate: Los datos del registro de Campaign_Contact que fueron actualizados.
+
+    Raises:
+        HTTPException:
+            - 404 NOT FOUND: Si el Contacto o el CampaignContact asociado no son encontrados.
+            - 400 BAD REQUEST: Si el ID del asesor médico no es válido.
+            - 500 INTERNAL SERVER ERROR: Para cualquier otro error inesperado.
+    """
+    logger.info(f"Recibida solicitud PUT para actualizar CampaignContact. Data: {campaign_contact_data.model_dump_json()}")
+
+    try:
+        service = CampaignContactService(db)
+        
+        # Llama al método del servicio para realizar la lógica de actualización
+        # Ya no usamos 'await' aquí porque el servicio es sincrónico
+        updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(
+            manychat_id=campaign_contact_data.manychat_id,
+            medical_advisor_id=campaign_contact_data.medical_advisor_id,
+            medical_assignment_date=campaign_contact_data.medical_assignment_date,
+            last_state=campaign_contact_data.last_state
+        )
+
+        if updated_campaign_contact_obj is None:
+            logger.warning(f"Actualización fallida: Contacto o CampaignContact no encontrado para ManyChat ID: {campaign_contact_data.manychat_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Contacto o asignación de campaña no encontrada para el ManyChat ID proporcionado."
+            )
+        
+        logger.info(f"CampaignContact ID {updated_campaign_contact_obj.id} actualizado exitosamente por el endpoint.")
+        
+        # Retorna el objeto actualizado mapeándolo a nuestro esquema de Pydantic.
+        return CampaignContactUpdate(
+            manychat_id=campaign_contact_data.manychat_id, 
+            medical_advisor_id=updated_campaign_contact_obj.medical_advisor_id,
+            medical_assignment_date=updated_campaign_contact_obj.medical_assignment_date,
+            last_state=updated_campaign_contact_obj.last_state
+        )
+
+    except ValueError as ve:
+        logger.error(f"Error de validación en la solicitud PUT: {ve}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ve)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.critical(f"Error inesperado en el endpoint PUT /campaign-contacts/update-by-manychat-id: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno del servidor al procesar la solicitud de actualización."
+        )
+
