@@ -443,3 +443,62 @@ docker-compose exec api python -c "from app.db.session import check_database_con
 ```bash
 docker-compose logs workers | grep "Processing"
 ```
+
+## Monitoreo y Scripts
+
+### Monitoreo
+
+El directorio [`monitoring/`](monitoring/) contiene scripts para monitorear el estado de las colas y otros recursos críticos. Por ejemplo, [`queue_monitor.py`](monitoring/queue_monitor.py) permite verificar el estado y la cantidad de mensajes pendientes en las colas de Azure Storage.
+
+#### Ejemplo de uso:
+```bash
+python monitoring/queue_monitor.py
+```
+
+### Scripts Auxiliares
+
+El directorio [`scripts/`](scripts/) incluye utilidades para facilitar tareas comunes de desarrollo y despliegue. Algunos ejemplos:
+- `docker-setup.sh`: Inicializa el entorno Docker.
+- `docker-test.sh`: Ejecuta los tests en el entorno Docker.
+- `docker-deploy.sh`: Despliega la aplicación usando Docker.
+- `start-workers.sh`: Inicia los workers manualmente.
+- (Revisa cada script para más detalles sobre su uso.)
+
+## Workers
+
+El directorio [`workers/`](workers/) contiene procesos de fondo:
+- [`queue_processor.py`](workers/queue_processor.py): Procesa eventos de la cola principal.
+- [`scheduled_sync.py`](workers/scheduled_sync.py): Realiza sincronizaciones periódicas entre sistemas.
+- [`campaign_processor.py`](workers/campaign_processor.py): Procesa campañas de marketing.
+- [`contact_processor.py`](workers/contact_processor.py): Procesa contactos de manera asíncrona.
+
+Para ejecutar un worker manualmente:
+```bash
+python -m workers.queue_processor
+python -m workers.scheduled_sync
+```
+
+## Health Check
+
+El endpoint `/health` verifica el estado de:
+- Base de datos
+- Conexión a Odoo
+- Estado de las colas de Azure
+
+Devuelve un JSON detallado con el estado de cada dependencia. Útil para integración con sistemas de monitoreo y orquestadores.
+
+## Testing y Cobertura
+
+Para ejecutar los tests y generar un reporte de cobertura:
+```bash
+pytest --cov=app tests/
+```
+El reporte se mostrará en consola. Para generar un reporte HTML:
+```bash
+pytest --cov=app --cov-report=html tests/
+```
+El resultado estará en el directorio `htmlcov/`.
+
+## Despliegue en Azure Functions
+
+La carpeta [`azure_function/`](azure_function/) contiene la configuración necesaria para desplegar la API como Azure Function. Si agregas nuevas dependencias, recuerda actualizar el archivo `requirements.txt` correspondiente y revisar los archivos `function.json` y `host.json` para reflejar los nuevos endpoints o triggers.
