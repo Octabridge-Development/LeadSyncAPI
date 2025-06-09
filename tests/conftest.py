@@ -1,4 +1,5 @@
 # tests/conftest.py
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -13,7 +14,7 @@ import importlib # Importar esto
 # Importamos Base desde app.db.session. Esto es seguro porque Base es un objeto estático
 # y no activa la inicialización del motor/sesión.
 from app.db.session import Base
-from app.db.models import Contact, CampaignContact, Advisor, Campaign
+from app.db.models import Contact, CampaignContact, Advisor, Campaign, ProductInteraction, ContactState, Client, Lead, OrderProduct
 
 # Importamos los módulos para parchearlos, no sus contenidos directos.
 import app.db.session as db_session_module
@@ -31,8 +32,9 @@ load_dotenv(DOTENV_PATH, override=True)
 # Configuración explícita para pruebas en memoria y mocks de credenciales.
 # Estas variables de entorno pueden ser usadas por get_settings si no se parchea,
 # pero el parcheo de get_settings es la estrategia más robusta ahora.
-os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-os.environ["AZURE_STORAGE_CONNECTION_STRING"] = "DefaultEndpointsProtocol=https;AccountName=teststorage;AccountKey=dummykeydummykeydummykeydummykeydummykeydummykeydummykeydummykey;EndpointSuffix=core.windows.net"
+# Cambia la base de datos a la real para pruebas integradas
+os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL", "mssql+pyodbc://usuario:password@servidor.database.windows.net:1433/basedatos?driver=ODBC+Driver+17+for+SQL+Server")
+os.environ["AZURE_STORAGE_CONNECTION_STRING"] = os.getenv("AZURE_STORAGE_CONNECTION_STRING", "DefaultEndpointsProtocol=https;AccountName=teststorage;AccountKey=dummykeydummykeydummykeydummykeydummykeydummykeydummykeydummykey;EndpointSuffix=core.windows.net")
 os.environ["API_KEY"] = os.getenv("API_KEY", "test_api_key_for_tests")
 os.environ["ODOO_URL"] = os.getenv("ODOO_URL", "http://test.odoo.local")
 os.environ["ODOO_DB"] = os.getenv("ODOO_DB", "test_odoo_db")
@@ -55,78 +57,35 @@ def session_mocker(pytestconfig):
 
 # --- PARCHADO AGRESIVO DE LA DB Y SERVICIOS EXTERNOS (AUTOUSE SESSION SCOPE) ---
 @pytest.fixture(autouse=True, scope="session")
-def setup_global_mocks_and_db(session_mocker): # Ya no necesita devolver nada, parchea directamente
+def setup_global_mocks_and_db(session_mocker):
     """
-    Realiza un parcheo agresivo del motor de DB y de los servicios externos
-    para asegurar que las pruebas sean aisladas y usen la configuración correcta.
+    Realiza un parcheo de servicios externos (colas, Azure, etc.) para pruebas,
+    pero NO parchea la base de datos ni el engine/session de SQLAlchemy.
+    Así, los tests usan la base real definida por DATABASE_URL.
     """
-    print("\n--- Configurando mocks globales con pytest-mock ---")
-
-    # 1. Mockear app.core.config.get_settings (PRIORIDAD ALTA: debe ser lo primero)
-    mock_settings_instance = MagicMock()
-    mock_settings_instance.DATABASE_URL = "sqlite:///:memory:"
-    mock_settings_instance.API_KEY = os.getenv("API_KEY", "test_api_key_for_tests")
-    # Asignar la URL como un string simple
-    mock_settings_instance.ODOO_URL = "http://test.odoo.local" 
-    mock_settings_instance.ODOO_DB = os.getenv("ODOO_DB", "test_odoo_db")
-    mock_settings_instance.ODOO_USERNAME = os.getenv("ODOO_USERNAME", "test_odoo_user")
-    mock_settings_instance.ODOO_PASSWORD = os.getenv("ODOO_PASSWORD", "test_odoo_password")
-    mock_settings_instance.AZURE_STORAGE_CONNECTION_STRING = "DefaultEndpointsProtocol=https;AccountName=teststorage;AccountKey=dummykeydummykeydummykeydummykeydummykeydummykeydummykeydummykey;EndpointSuffix=core.windows.net"
-    mock_settings_instance.USE_KEY_VAULT = False
-    mock_settings_instance.DEBUG = True # Importante para logs de prueba
-    # Añadimos API_V1_STR al mock de settings para resolver el AssertionError
-    mock_settings_instance.API_V1_STR = "/api/v1" # Sin trailing slash
+    print("\n--- Configurando mocks globales con pytest-mock (solo servicios externos, no DB) ---")
     
+    # 1. Mockear app.core.config.get_settings SOLO para servicios externos y API_KEY
+    mock_settings_instance = MagicMock()
+    mock_settings_instance.API_KEY = "Miasaludnatural123**"
+    mock_settings_instance.ODOO_URL = "https://ironsolutionbd.odoo.com"
+    mock_settings_instance.ODOO_DB = "ironsolutionbd"
+    mock_settings_instance.ODOO_USERNAME = "sistemas@miasaludnatural.com"
+    mock_settings_instance.ODOO_PASSWORD = "Mia123**"
+    mock_settings_instance.AZURE_STORAGE_CONNECTION_STRING = ""
+    mock_settings_instance.DATABASE_URL = "mssql+pyodbc://ironsolution:universo123**@miasaludnatural.database.windows.net:1433/miasaludnaturaldb?driver=ODBC+Driver+18+for+SQL+Server"
+    mock_settings_instance.USE_KEY_VAULT = False
+    mock_settings_instance.DEBUG = True
+    mock_settings_instance.API_V1_STR = "/api/v1"
+    
+
     session_mocker.patch.object(app_config_module, 'get_settings', return_value=mock_settings_instance)
-    # Si app.core.config usa un patrón singleton con una variable global como _settings,
-    # también es buena práctica parchear esa variable para forzar su reinicio o usar el mock.
     if hasattr(app_config_module, '_settings'):
         session_mocker.patch.object(app_config_module, '_settings', mock_settings_instance)
-
-    # --- AHORA: Recargar el módulo app.core.config para que tome el mock ---
-    # Esto es crucial para asegurar que `get_settings()` en `app.core.config` devuelva el mock
-    # para cualquier módulo que lo importe después de este punto.
     importlib.reload(app_config_module)
     print("--- app.core.config module re-cargado para aplicar parche a 'get_settings'. ---")
-    
-    # 2. Mockear sqlalchemy.create_engine para controlar parámetros específicos de SQLite
-    original_create_engine = create_engine
-    
-    def mocked_create_engine(url, **kwargs):
-        if url == "sqlite:///:memory:":
-            kwargs.pop("pool_size", None)
-            kwargs.pop("max_overflow", None)
-            kwargs.pop("pool_recycle", None)
-            if "connect_args" not in kwargs:
-                kwargs["connect_args"] = {}
-            # Asegura check_same_thread=False para compatibilidad con hilos en pruebas
-            kwargs["connect_args"]["check_same_thread"] = False 
-            kwargs["connect_args"].pop("prepared_statement_cache_size", None)
-        return original_create_engine(url, **kwargs)
 
-    session_mocker.patch('sqlalchemy.create_engine', side_effect=mocked_create_engine)
-    print("--- sqlalchemy.create_engine mockeado para SQLite. ---")
-
-    # AHORA, creamos el engine y SessionLocal de prueba usando los mocks ya establecidos.
-    # Esto asegura que cualquier 'create_engine' use nuestro mock, y las settings sean las de prueba.
-    print("--- Creando engine y SessionLocal de prueba para parcheo directo ---")
-    test_engine = create_engine(
-        mock_settings_instance.DATABASE_URL,
-        connect_args={"check_same_thread": False} 
-    )
-    test_session_local = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
-    print("--- Engine y SessionLocal de prueba creados. ---")
-
-    # 3. Parchear directamente los objetos globales 'engine', 'SessionLocal' y 'get_db' en app.db.session
-    # ESTO ES CRÍTICO. Asegura que cuando app.db.session se importa, sus variables globales
-    # apunten a nuestras instancias de prueba, y que get_db devuelva sesiones de la SessionLocal de prueba.
-    session_mocker.patch.object(db_session_module, 'engine', test_engine)
-    session_mocker.patch.object(db_session_module, 'SessionLocal', test_session_local)
-    # Parcheamos get_db para que siempre use la SessionLocal de prueba
-    session_mocker.patch.object(db_session_module, 'get_db', side_effect=test_session_local)
-    print("--- app.db.session.engine, SessionLocal y get_db parcheados. ---")
-
-    # 4. Mockear el QueueService de Azure Storage y sus instancias singleton
+    # 2. Mockear servicios externos (colas, Azure, etc.)
     class MockQueueServiceImplementation:
         def __init__(self):
             print("MockQueueServiceImplementation (app.services.queue_service) instanciado. (Este es un mock, no una conexión real a Azure).")
@@ -144,81 +103,55 @@ def setup_global_mocks_and_db(session_mocker): # Ya no necesita devolver nada, p
         def contact_queue_name(self): return "mock-contact-queue"
         @property
         def dlq_name(self): return "mock-dlq"
-
-    # Parchear la clase QueueService directamente en app.services.queue_service
     session_mocker.patch('app.services.queue_service.QueueService', new=MockQueueServiceImplementation)
-    # Parchear la instancia singleton _queue_service_instance directamente en app.api.deps
     session_mocker.patch.object(api_deps_module, '_queue_service_instance', MockQueueServiceImplementation())
     print("--- app.services.queue_service.QueueService y app.api.deps._queue_service_instance mockeados. ---")
 
-    # 5. Mockear AzureSQLService y su instancia singleton
     class MockAzureSQLService:
         def __init__(self):
             print("MockAzureSQLService (app.services.azure_sql_service) instanciado. (Este es un mock, no una conexión real a Azure SQL).")
         def get_contact_by_manychat_id(self, manychat_id: str):
             print(f"MockAzureSQLService (app.services.azure_sql_service): get_contact_by_manychat_id llamado para {manychat_id} (mocked).")
-            # Devolver un mock de Contact si se espera que exista en ciertos tests
-            if manychat_id.startswith("manychat_id_existente"):
-                mock_contact = MagicMock(id=1, manychat_id=manychat_id, first_name="Mock", last_name="Contact")
-                return mock_contact
-            return None 
-        # Añade aquí otros métodos que tu aplicación llame en AzureSQLService
+            return None
         def get_advisor_by_id(self, advisor_id: int):
             print(f"MockAzureSQLService (app.services.azure_sql_service): get_advisor_by_id llamado para {advisor_id} (mocked).")
-            return MagicMock(id=advisor_id, name="Mock Advisor") # Simular un Advisor existente
-
+            return MagicMock(id=advisor_id, name="Mock Advisor")
         def process_campaign_event(self, event_obj):
             print(f"MockAzureSQLService (app.services.azure_sql_service): process_campaign_event llamado (mocked).")
             pass
-
-
     session_mocker.patch('app.services.azure_sql_service.AzureSQLService', new=MockAzureSQLService)
-    # Parchear la instancia singleton _azure_sql_service_instance directamente en app.api.deps
     session_mocker.patch.object(api_deps_module, '_azure_sql_service_instance', MockAzureSQLService())
     print("--- app.services.azure_sql_service.AzureSQLService y app.api.deps._azure_sql_service_instance mockeados. ---")
 
-    # 6. Mockear Azure Key Vault para evitar llamadas de red
+    # 3. Mockear Azure Key Vault para evitar llamadas de red
     try:
         from azure.keyvault.secrets import SecretClient
         session_mocker.patch('azure.keyvault.secrets.SecretClient.get_secret', return_value=MagicMock(value="mock_secret_value"))
         print("--- Azure Key Vault SecretClient mockeado exitosamente. ---")
     except ImportError as e:
         print(f"--- No se pudo importar azure.keyvault.secrets.SecretClient para mockearlo: {e} ---")
-
     try:
         from azure.identity import DefaultAzureCredential
         session_mocker.patch('azure.identity.DefaultAzureCredential', return_value=MagicMock())
         print("--- azure.identity.DefaultAzureCredential mockeado exitosamente. ---")
     except ImportError as e:
         print(f"--- No se pudo importar azure.identity.DefaultAzureCredential para mockearlo: {e} ---")
-
     yield
 
 
 # --- Fixture para la sesión de base de datos (por test) ---
-# Ahora usa las instancias de engine y SessionLocal generadas y parcheadas directamente en db_session_module.
 @pytest.fixture(name="db_session")
-def db_session_fixture(setup_global_mocks_and_db) -> Generator[Session, None, None]:
+def db_session_fixture() -> Generator[Session, None, None]:
     """
-    Proporciona una sesión de base de datos para pruebas.
-    Crea las tablas, las limpia después de cada prueba.
+    Proporciona una sesión de base de datos real para pruebas.
+    No crea ni elimina tablas, solo maneja la sesión.
     """
-    # Accedemos al engine y SessionLocal a través del módulo app.db.session,
-    # que ya fue parcheado por setup_global_mocks_and_db.
-    engine = db_session_module.engine
-    SessionLocal = db_session_module.SessionLocal
-    
-    # IMPORTANTE: Asegurarse de que Base.metadata.create_all se llama aquí,
-    # en la instancia de DB que usará el test.
-    Base.metadata.create_all(bind=engine) 
-    session = SessionLocal() # Creamos una nueva sesión para cada test
+    from app.db.session import SessionLocal
+    session = SessionLocal()
     try:
         yield session
     finally:
         session.close()
-        # Es buena práctica borrar las tablas para cada test para asegurar aislamiento.
-        # Para SQLite en memoria, esto también ayuda a garantizar una base de datos limpia.
-        Base.metadata.drop_all(bind=engine)
 
 # --- Fixture para el cliente de prueba de FastAPI ---
 @pytest.fixture(name="client")
@@ -226,51 +159,33 @@ def client_fixture(db_session: Session, setup_global_mocks_and_db) -> Generator[
     """
     Proporciona un cliente de prueba de FastAPI.
     Sobrescribe las dependencias de la base de datos y servicios externos.
+    El TestClient resultante siempre envía el header x-api-key correcto.
     """
-    # IMPORTAMOS LA APLICACIÓN DE FASTAPI AQUÍ.
-    # Esto asegura que app.main se inicialice *después* de que todos los mocks y parcheos globales
-    # (incluyendo los de app.db.session y app.api.deps) estén en su lugar.
-    from app.main import app 
-
-    # Sobrescribir get_db (y get_db_session) para que proporcione una NUEVA sesión de SessionLocal por cada solicitud
-    # Ya está parcheado a nivel de módulo, pero podemos re-afirmarlo aquí si es necesario.
+    from app.main import app
     def override_get_db_for_client():
-        # Usamos la SessionLocal parcheada del módulo db_session_module.
         session = db_session_module.SessionLocal()
         try:
             yield session
         finally:
             session.close()
-
-    # Sobrescribir get_queue_service para inyectar nuestro mock.
     def override_get_queue_service():
-        # Devuelve la instancia mockeada que fue parcheada directamente en app.api.deps._queue_service_instance
         return api_deps_module._queue_service_instance
-
-    # Sobrescribir get_azure_sql_service para inyectar nuestro mock.
     def override_get_azure_sql_service():
-        # Devuelve la instancia mockeada que fue parcheada directamente en app.api.deps._azure_sql_service_instance
         return api_deps_module._azure_sql_service_instance
-
     app.dependency_overrides[api_deps_module.get_db] = override_get_db_for_client
-    app.dependency_overrides[api_deps_module.get_db_session] = override_get_db_for_client # Alias en deps.py
+    app.dependency_overrides[api_deps_module.get_db_session] = override_get_db_for_client
     app.dependency_overrides[api_deps_module.get_queue_service] = override_get_queue_service
     app.dependency_overrides[api_deps_module.get_azure_sql_service] = override_get_azure_sql_service
-    
-    # Obtener la API_KEY de las settings (que ya están configuradas para test)
-    settings = app_config_module.get_settings() # Accede a las settings mockeadas
-    api_key_for_tests = settings.API_KEY
-
-    # Definir los headers con la API Key
-    test_headers = {
-        "x-api-key": api_key_for_tests
-    }
-
-    # Pasar los headers al TestClient
-    with TestClient(app, headers=test_headers) as test_client:
+    settings = app_config_module.get_settings()
+    api_key_for_tests = "Miasaludnatural123**"  # Forzar la API Key correcta
+    class APIKeyTestClient(TestClient):
+        def request(self, method, url, **kwargs):
+            headers = kwargs.pop("headers", {}) or {}
+            headers["x-api-key"] = api_key_for_tests
+            kwargs["headers"] = headers
+            return super().request(method, url, **kwargs)
+    with APIKeyTestClient(app) as test_client:
         yield test_client
-    
-    # Limpiar las sobrescrituras al final del test
     app.dependency_overrides.clear()
 
 
@@ -279,6 +194,17 @@ def client_fixture(db_session: Session, setup_global_mocks_and_db) -> Generator[
 @pytest.fixture
 def create_test_contact(db_session: Session):
     def _create_contact(manychat_id: str, **kwargs) -> Contact:
+        existing = db_session.query(Contact).filter_by(manychat_id=manychat_id).first()
+        if existing:
+            # Limpiar en cascada según el DER
+            db_session.query(CampaignContact).filter_by(contact_id=existing.id).delete()
+            db_session.query(ProductInteraction).filter_by(contact_id=existing.id).delete()
+            db_session.query(ContactState).filter_by(contact_id=existing.id).delete()
+            db_session.query(Lead).filter(Lead.campaign_contact_id.in_(
+                db_session.query(CampaignContact.id).filter_by(contact_id=existing.id)
+            )).delete(synchronize_session=False)
+            db_session.delete(existing)
+            db_session.commit()
         contact_data = {
             "manychat_id": manychat_id,
             "first_name": "Test",
@@ -291,12 +217,9 @@ def create_test_contact(db_session: Session):
             "gender": "Unknown",
             **kwargs
         }
-        
         valid_keys = {column.key for column in Contact.__table__.columns}
         valid_keys.update({rel.key for rel in Contact.__mapper__.relationships})
-
         filtered_contact_data = {k: v for k, v in contact_data.items() if k in valid_keys}
-
         contact = Contact(**filtered_contact_data)
         db_session.add(contact)
         db_session.commit()
@@ -305,8 +228,42 @@ def create_test_contact(db_session: Session):
     return _create_contact
 
 @pytest.fixture
+def create_test_campaign(db_session: Session):
+    def _create_campaign(id: int, name: str, date_start: datetime, **kwargs) -> Campaign:
+        existing = db_session.query(Campaign).filter_by(id=id).first()
+        if existing:
+            # Limpiar en cascada según el DER
+            db_session.query(CampaignContact).filter_by(campaign_id=existing.id).delete()
+            db_session.delete(existing)
+            db_session.commit()
+        campaign_data = {
+            "id": id,
+            "name": name,
+            "date_start": date_start,
+            "date_end": date_start + timedelta(days=30),
+            "budget": 1000.00,
+            "status": "Active",
+            **kwargs
+        }
+        valid_keys = {column.key for column in Campaign.__table__.columns}
+        valid_keys.update({rel.key for rel in Campaign.__mapper__.relationships})
+        filtered_campaign_data = {k: v for k, v in campaign_data.items() if k in valid_keys}
+        campaign = Campaign(**filtered_campaign_data)
+        db_session.add(campaign)
+        db_session.commit()
+        db_session.refresh(campaign)
+        return campaign
+    return _create_campaign
+
+@pytest.fixture
 def create_test_advisor(db_session: Session):
     def _create_advisor(id: int, name: str, odoo_id: str = None, **kwargs) -> Advisor:
+        existing = db_session.query(Advisor).filter_by(id=id).first()
+        if existing:
+            db_session.query(CampaignContact).filter_by(commercial_advisor_id=existing.id).delete()
+            db_session.query(CampaignContact).filter_by(medical_advisor_id=existing.id).delete()
+            db_session.delete(existing)
+            db_session.commit()
         advisor_data = {
             "id": id,
             "name": name,
@@ -328,29 +285,6 @@ def create_test_advisor(db_session: Session):
         db_session.refresh(advisor)
         return advisor
     return _create_advisor
-
-@pytest.fixture
-def create_test_campaign(db_session: Session):
-    def _create_campaign(id: int, name: str, date_start: datetime, **kwargs) -> Campaign:
-        campaign_data = {
-            "id": id,
-            "name": name,
-            "date_start": date_start,
-            "date_end": date_start + timedelta(days=30),
-            "budget": 1000.00,
-            "status": "Active",
-            **kwargs
-        }
-        valid_keys = {column.key for column in Campaign.__table__.columns}
-        valid_keys.update({rel.key for rel in Campaign.__mapper__.relationships})
-        filtered_campaign_data = {k: v for k, v in campaign_data.items() if k in valid_keys}
-
-        campaign = Campaign(**filtered_campaign_data)
-        db_session.add(campaign)
-        db_session.commit()
-        db_session.refresh(campaign)
-        return campaign
-    return _create_campaign
 
 @pytest.fixture
 def create_test_campaign_contact(db_session: Session):

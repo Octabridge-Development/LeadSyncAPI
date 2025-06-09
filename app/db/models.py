@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, Date, DECIMAL
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from datetime import datetime # Asegúrate de importar datetime
+from datetime import datetime, timezone # Asegúrate de importar timezone
 from app.db.session import Base
 
 # --- Modelo Address ---
@@ -64,7 +64,7 @@ class Contact(Base):
     gender = Column(String(50), nullable=True)
     phone = Column(String(50), nullable=True)
     subscription_date = Column(DateTime, nullable=True)
-    entry_date = Column(DateTime, nullable=True, default=datetime.utcnow) # default al crear
+    entry_date = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc)) # default al crear
     initial_state = Column(String(255), nullable=True) # Tu campo VARCHAR en DB
     odoo_contact_id = Column(String(255), nullable=True)
 

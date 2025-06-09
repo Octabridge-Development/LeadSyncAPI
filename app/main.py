@@ -121,18 +121,9 @@ async def startup_event():
     # Verificar colas de Azure
     try:
         from app.services.queue_service import QueueService
-        
-        # --- ¡AÑADE ESTAS LÍNEAS TEMPORALES PARA DEPURAR AQUÍ! ---
-        # Imprime el objeto settings completo para ver todas las variables cargadas
         print(f"DEBUG_SETTINGS_OBJECT_RAW: {settings.model_dump()}")
-        
-        # La línea de logger que ya tienes
         logger.info(f"Cadena de conexión de Azure Storage (desde settings - logger): {settings.AZURE_STORAGE_CONNECTION_STRING}")
-        
-        # ¡AÑADE ESTA LÍNEA NUEVA PARA IMPRIMIR DIRECTAMENTE LA CADENA DE CONEXIÓN!
         print(f"DEBUG_CONNECTION_STRING_RAW: {settings.AZURE_STORAGE_CONNECTION_STRING}")
-        # -----------------------------------------------
-
         queue_service = QueueService()
         logger.info("✅ Colas de Azure Storage verificadas")
     except Exception as e:

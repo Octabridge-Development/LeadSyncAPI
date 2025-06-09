@@ -27,7 +27,9 @@ class CampaignContactService:
         campaign_id: Optional[int] = None, # Añadir este parámetro 
         medical_advisor_id: Optional[int] = None,
         medical_assignment_date: Optional[datetime] = None,
-        last_state: Optional[str] = None
+        last_state: Optional[str] = None,
+        # Accept extra kwargs for partial update
+        **kwargs
     ) -> Optional[CampaignContact]:
         """
         Busca un Contacto por su ManyChat ID, luego encuentra su CampaignContact
@@ -75,37 +77,30 @@ class CampaignContactService:
         logger.info(f"CampaignContact encontrado: ID {campaign_contact.id}, Contact ID: {campaign_contact.contact_id}, Campaign ID: {campaign_contact.campaign_id}")
 
         # 3. Preparar los datos para la actualización
-        # Verificar si se proporcionó un medical_advisor_id y si es diferente al actual
-        if medical_advisor_id is not None and medical_advisor_id != campaign_contact.medical_advisor_id: # 
-            # Opcional pero recomendado: Verificar si el medical_advisor_id existe en la tabla Advisor
-            advisor_exists = self.db.query(Advisor.id).filter(Advisor.id == medical_advisor_id).scalar_one_or_none() # 
-            if not advisor_exists: # 
-                logger.error(f"Medical Advisor ID {medical_advisor_id} no existe en la tabla Advisor.")
-                raise ValueError(f"El ID de Asesor Médico {medical_advisor_id} no es válido. No se encontró en la tabla Advisor.") # 
-            
-            campaign_contact.medical_advisor_id = medical_advisor_id # 
+        # Only update fields that were passed (support partial update)
+        update_fields = set([
+            k for k in [
+                "campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state"
+            ] if k in kwargs or locals()[k] is not None
+        ])
+        if "medical_advisor_id" in update_fields:
+            if medical_advisor_id is not None:
+                advisor_exists = self.db.query(Advisor.id).filter(Advisor.id == medical_advisor_id).one_or_none()
+                if not advisor_exists:
+                    logger.error(f"Medical Advisor ID {medical_advisor_id} no existe en la tabla Advisor.")
+                    raise ValueError(f"El ID de Asesor Médico {medical_advisor_id} no es válido. No se encontró en la tabla Advisor.")
+            campaign_contact.medical_advisor_id = medical_advisor_id
             logger.debug(f"Actualizando medical_advisor_id a {medical_advisor_id}")
-
-        # Verificar si se proporcionó medical_assignment_date y si es diferente al actual
-        if medical_assignment_date is not None and medical_assignment_date != campaign_contact.medical_assignment_date: # 
-            campaign_contact.medical_assignment_date = medical_assignment_date # 
-            logger.debug(f"Actualizando medical_assignment_date a {medical_assignment_date}")
-        elif medical_assignment_date is None and campaign_contact.medical_assignment_date is None: # 
-            # Si no se proporcionó una fecha y la columna está vacía, usar la fecha y hora UTC actuales
-            campaign_contact.medical_assignment_date = datetime.utcnow() # 
-            logger.debug(f"medical_assignment_date no proporcionado y nulo en DB, usando fecha actual: {campaign_contact.medical_assignment_date}")
-
-
-        # Verificar si se proporcionó last_state y si es diferente al actual
-        if last_state is not None and last_state != campaign_contact.last_state: # 
-            campaign_contact.last_state = last_state # 
+        if "medical_assignment_date" in update_fields:
+            if medical_assignment_date is not None:
+                campaign_contact.medical_assignment_date = medical_assignment_date
+                logger.debug(f"Actualizando medical_assignment_date a {medical_assignment_date}")
+            elif campaign_contact.medical_assignment_date is None:
+                campaign_contact.medical_assignment_date = datetime.utcnow()
+                logger.debug(f"medical_assignment_date no proporcionado y nulo en DB, usando fecha actual: {campaign_contact.medical_assignment_date}")
+        if "last_state" in update_fields:
+            campaign_contact.last_state = last_state
             logger.debug(f"Actualizando last_state a '{last_state}'")
-
-        # Comprobar si se realizaron cambios reales para evitar un commit innecesario
-        if not self.db.is_modified(campaign_contact, include_collections=False):
-            logger.info("No se detectaron cambios reales en el objeto CampaignContact para actualizar.")
-            return campaign_contact
-
 
         # 4. Realizar la actualización en la base de datos
         try:

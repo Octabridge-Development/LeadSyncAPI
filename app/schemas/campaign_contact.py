@@ -1,8 +1,9 @@
 # app/schemas/campaign_contact.py
 
 from pydantic import BaseModel, Field
+from pydantic import ConfigDict
 from datetime import datetime
-from typing import Optional
+from typing import Optional, ClassVar
 
 class CampaignContactUpdate(BaseModel):
     """
@@ -19,16 +20,13 @@ class CampaignContactUpdate(BaseModel):
     medical_assignment_date: Optional[datetime] = Field(None, description="Fecha y hora de asignación del médico. Si no se proporciona y la columna está vacía, se usará la fecha y hora UTC actuales.")
     last_state: Optional[str] = Field(None, max_length=100, description="Último estado de la campaña-contacto")
 
-    class Config:
-        # Permite que el modelo se use con objetos ORM (SQLAlchemy)
-        from_attributes = True # Equivalente a orm_mode = True en Pydantic v1
-        
-        json_schema_extra = {
-            "example": {
-                "manychat_id": "psid_1234567890", # Ejemplo de un ManyChat ID
-                "campaign_id": 10, # Ejemplo de un Campaign ID (opcional)
-                "medical_advisor_id": 123,      # Ejemplo de un ID de asesor médico
-                "medical_assignment_date": "2025-06-06T10:30:00Z", # Ejemplo de fecha y hora
-                "last_state": "Asignado a Médico" # Ejemplo de estado
-            }
+    model_config = ConfigDict(from_attributes=True)
+    json_schema_extra: ClassVar[dict] = {
+        "example": {
+            "manychat_id": "psid_1234567890", # Ejemplo de un ManyChat ID
+            "campaign_id": 10, # Ejemplo de un Campaign ID (opcional)
+            "medical_advisor_id": 123,      # Ejemplo de un ID de asesor médico
+            "medical_assignment_date": "2025-06-06T10:30:00Z", # Ejemplo de fecha y hora
+            "last_state": "Asignado a Médico" # Ejemplo de estado
         }
+    }

@@ -368,15 +368,15 @@ def update_campaign_contact_endpoint( # Ya no es 'async def'
 
     try:
         service = CampaignContactService(db)
-        
-        # Llama al método del servicio para realizar la lógica de actualización
-        # Ya no usamos 'await' aquí porque el servicio es sincrónico
-        updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(
-            manychat_id=campaign_contact_data.manychat_id,
-            medical_advisor_id=campaign_contact_data.medical_advisor_id,
-            medical_assignment_date=campaign_contact_data.medical_assignment_date,
-            last_state=campaign_contact_data.last_state
-        )
+        # Detect which fields were set in the request
+        fields_set = campaign_contact_data.model_fields_set
+        update_kwargs = {}
+        for field in ["campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state"]:
+            if field in fields_set:
+                update_kwargs[field] = getattr(campaign_contact_data, field)
+        # Always pass manychat_id
+        update_kwargs["manychat_id"] = campaign_contact_data.manychat_id
+        updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(**update_kwargs)
 
         if updated_campaign_contact_obj is None:
             logger.warning(f"Actualización fallida: Contacto o CampaignContact no encontrado para ManyChat ID: {campaign_contact_data.manychat_id}")
