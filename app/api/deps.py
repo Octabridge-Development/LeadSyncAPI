@@ -8,11 +8,10 @@ from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.services.queue_service import QueueService
 from app.services.azure_sql_service import AzureSQLService
-from app.core.config import get_settings
+from app.core.config import get_settings # Mantener esta importación
 from app.core.logging import logger
 
-# Obtener configuración
-settings = get_settings()
+# REMOVIDA: settings = get_settings() # Esta línea se ha eliminado del nivel global
 
 # Instancias singleton de servicios
 _queue_service_instance = None
@@ -58,6 +57,9 @@ async def verify_api_key(x_api_key: str = Header(None)) -> str:
     Raises:
         HTTPException: Si el API Key es inválido o falta
     """
+    # AHORA OBTENEMOS LAS CONFIGURACIONES AQUI DENTRO DE LA FUNCION
+    current_settings = get_settings() 
+
     if x_api_key is None:
         logger.warning("Intento de acceso sin API Key")
         raise HTTPException(
@@ -66,7 +68,12 @@ async def verify_api_key(x_api_key: str = Header(None)) -> str:
             headers={"WWW-Authenticate": "ApiKey"},
         )
 
-    if x_api_key != settings.API_KEY:
+    # --- LINEAS DE DEPURACIÓN PARA CONFIRMAR (puedes eliminarlas después) ---
+    print(f"DEBUG (deps.py): x_api_key recibido: '{x_api_key}'")
+    print(f"DEBUG (deps.py): current_settings.API_KEY: '{current_settings.API_KEY}'")
+    # ----------------------------------------------------------------------
+
+    if x_api_key != current_settings.API_KEY: # Usamos current_settings
         logger.warning(f"Intento de acceso con API Key inválido: {x_api_key[:10]}...")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

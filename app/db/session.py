@@ -12,19 +12,46 @@ Base = declarative_base()
 # --- 2. Configuración del Motor de SQLAlchemy ---
 # El 'engine' es el punto de conexión real a tu base de datos.
 # Configuraciones del pool de conexiones para mejor rendimiento y estabilidad:
-settings = get_settings()
-engine = create_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,     # Imprime SQL si DEBUG_MODE es True
-    pool_size=20,            # Mantiene 20 conexiones abiertas y listas para usar
-    max_overflow=0,          # No permite conexiones adicionales más allá de pool_size
-    pool_recycle=3600,       # Recicla (cierra y reabre) conexiones cada 3600 segundos (1 hora)
-                             # Esto previene problemas de timeout con la base de datos.
-    connect_args={
-        "timeout": 30,       # Tiempo de espera para establecer una conexión
-        "prepared_statement_cache_size": 0 # Útil para algunos entornos como Azure SQL
-    }
-)
+settings = get_settings() # Obtiene la instancia de configuración
+
+# Determina si es una base de datos SQLite en memoria
+# Esto es CRÍTICO para los tests.
+is_sqlite_in_memory = settings.DATABASE_URL == "sqlite:///:memory:"
+
+# Argumentos base para create_engine
+engine_args = {
+    "url": settings.DATABASE_URL,
+    "echo": settings.DEBUG,
+}
+
+# Añade condicionalmente los argumentos de pool si NO es SQLite en memoria
+if not is_sqlite_in_memory:
+    engine_args.update({
+        "pool_size": 20,
+        "max_overflow": 0, # No permite conexiones adicionales más allá de pool_size
+        "pool_recycle": 3600, # Recicla (cierra y reabre) conexiones cada 3600 segundos (1 hora)
+                              # Esto previene problemas de timeout con la base de datos.
+    })
+
+# Configura connect_args.
+connect_args = {
+    "timeout": 30, # Tiempo de espera para establecer una conexión
+}
+
+# 'prepared_statement_cache_size' es específico de ciertos dialectos (como SQL Server)
+# y puede causar TypeError con SQLite.
+if not is_sqlite_in_memory:
+    connect_args["prepared_statement_cache_size"] = 0
+
+# Para SQLite, 'check_same_thread=False' es a menudo necesario para multithreading con FastAPI
+if is_sqlite_in_memory:
+    connect_args["check_same_thread"] = False
+
+engine_args["connect_args"] = connect_args
+
+# Crea el motor con los argumentos preparados
+engine = create_engine(**engine_args)
+
 
 # --- 3. Configuración del Constructor de Sesiones ---
 # 'SessionLocal' es una "fábrica" que crea nuevas sesiones de base de datos.
