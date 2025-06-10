@@ -67,16 +67,17 @@ def setup_global_mocks_and_db(session_mocker):
     
     # 1. Mockear app.core.config.get_settings SOLO para servicios externos y API_KEY
     mock_settings_instance = MagicMock()
-    mock_settings_instance.API_KEY = "Miasaludnatural123**"
-    mock_settings_instance.ODOO_URL = "https://ironsolutionbd.odoo.com"
-    mock_settings_instance.ODOO_DB = "ironsolutionbd"
-    mock_settings_instance.ODOO_USERNAME = "sistemas@miasaludnatural.com"
-    mock_settings_instance.ODOO_PASSWORD = "Mia123**"
-    mock_settings_instance.AZURE_STORAGE_CONNECTION_STRING = ""
-    mock_settings_instance.DATABASE_URL = "mssql+pyodbc://ironsolution:universo123**@miasaludnatural.database.windows.net:1433/miasaludnaturaldb?driver=ODBC+Driver+18+for+SQL+Server"
-    mock_settings_instance.USE_KEY_VAULT = False
-    mock_settings_instance.DEBUG = True
-    mock_settings_instance.API_V1_STR = "/api/v1"
+    # Tomar valores del entorno si existen, si no, usar un valor por defecto seguro para tests
+    mock_settings_instance.API_KEY = os.environ.get("API_KEY", "test_api_key_for_tests")
+    mock_settings_instance.ODOO_URL = os.environ.get("ODOO_URL", "http://test.odoo.local")
+    mock_settings_instance.ODOO_DB = os.environ.get("ODOO_DB", "test_odoo_db")
+    mock_settings_instance.ODOO_USERNAME = os.environ.get("ODOO_USERNAME", "test_odoo_user")
+    mock_settings_instance.ODOO_PASSWORD = os.environ.get("ODOO_PASSWORD", "test_odoo_password")
+    mock_settings_instance.AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "DefaultEndpointsProtocol=https;AccountName=teststorage;AccountKey=dummykeydummykeydummykeydummykeydummykeydummykeydummykeydummykey;EndpointSuffix=core.windows.net")
+    mock_settings_instance.DATABASE_URL = os.environ.get("DATABASE_URL", "mssql+pyodbc://usuario:password@servidor.database.windows.net:1433/basedatos?driver=ODBC+Driver+17+for+SQL+Server")
+    mock_settings_instance.USE_KEY_VAULT = os.environ.get("USE_KEY_VAULT", "false").lower() in ("true", "1", "yes")
+    mock_settings_instance.DEBUG = os.environ.get("DEBUG", "true").lower() in ("true", "1", "yes")
+    mock_settings_instance.API_V1_STR = os.environ.get("API_V1_STR", "/api/v1")
     
 
     session_mocker.patch.object(app_config_module, 'get_settings', return_value=mock_settings_instance)

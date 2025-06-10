@@ -369,11 +369,13 @@ def update_campaign_contact_endpoint( # Ya no es 'async def'
     try:
         service = CampaignContactService(db)
         # Detect which fields were set in the request
-        fields_set = campaign_contact_data.model_fields_set
+        fields_set = getattr(campaign_contact_data, 'model_fields_set', set())
         update_kwargs = {}
         for field in ["campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state"]:
-            if field in fields_set:
-                update_kwargs[field] = getattr(campaign_contact_data, field)
+            if field in fields_set and hasattr(campaign_contact_data, field):
+                value = getattr(campaign_contact_data, field, None)
+                if value is not None:
+                    update_kwargs[field] = value
         # Always pass manychat_id
         update_kwargs["manychat_id"] = campaign_contact_data.manychat_id
         updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(**update_kwargs)

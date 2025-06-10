@@ -81,7 +81,7 @@ class CampaignContactService:
         update_fields = set([
             k for k in [
                 "campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state"
-            ] if k in kwargs or locals()[k] is not None
+            ] if k in kwargs or locals().get(k) is not None
         ])
         if "medical_advisor_id" in update_fields:
             if medical_advisor_id is not None:

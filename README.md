@@ -444,61 +444,86 @@ docker-compose exec api python -c "from app.db.session import check_database_con
 docker-compose logs workers | grep "Processing"
 ```
 
-## Monitoreo y Scripts
+## Endpoints Principales
 
-### Monitoreo
+### ManyChat Webhooks
 
-El directorio [`monitoring/`](monitoring/) contiene scripts para monitorear el estado de las colas y otros recursos críticos. Por ejemplo, [`queue_monitor.py`](monitoring/queue_monitor.py) permite verificar el estado y la cantidad de mensajes pendientes en las colas de Azure Storage.
+- `POST /api/v1/manychat/webhook/contact`  
+  Recibe eventos de contacto desde ManyChat y los encola para procesamiento asíncrono.
+  - Requiere header `X-API-KEY`.
+  - Body: `ManyChatContactEvent`
 
-#### Ejemplo de uso:
-```bash
-python monitoring/queue_monitor.py
+- `POST /api/v1/manychat/webhook/campaign-assignment`  
+  Recibe asignaciones de campaña y asesores desde ManyChat y los encola para procesamiento asíncrono.
+  - Requiere header `X-API-KEY`.
+  - Body: `ManyChatCampaignAssignmentEvent`
+
+- `PUT /api/v1/manychat/campaign-contacts/update-by-manychat-id`  
+  Permite actualizar campos específicos de un registro de Campaign_Contact usando el ManyChat ID y, opcionalmente, el campaign_id.  
+  - Requiere header `X-API-KEY`.
+  - Body: `{ manychat_id, campaign_id?, medical_advisor_id?, medical_assignment_date?, last_state? }`
+  - Responde con los datos actualizados o error detallado.
+
+- `GET /api/v1/manychat/webhook/verify`  
+  Endpoint de verificación para ManyChat (útil para pruebas de integración).
+
+### Health y Reportes
+
+- `GET /health`  
+  Health check simple de la API.
+- `GET /api/v1/reports/health`  
+  Health check completo (requiere `X-API-KEY`).
+
+## Seguridad y Variables de Entorno
+
+- **Nunca subas tu archivo `.env` real al repositorio.** Usa `.env.example` para compartir la estructura de variables necesarias.
+- Las credenciales y claves deben ser gestionadas mediante variables de entorno o Azure Key Vault en producción.
+- Todos los endpoints protegidos requieren el header `X-API-KEY`.
+
+### Ejemplo de `.env.example`
+
+```
+DEBUG=true
+API_KEY=tu-api-key
+API_V1_STR=/api/v1
+ODOO_URL=https://tu-odoo.com
+ODOO_DB=nombre_db
+ODOO_USERNAME=usuario@dominio.com
+ODOO_PASSWORD=clave_odoo
+ODOO_RATE_LIMIT=1.0
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=cuenta;AccountKey=clave;EndpointSuffix=core.windows.net
+DATABASE_URL=mssql+pyodbc://usuario:password@servidor.database.windows.net:1433/basedatos?driver=ODBC+Driver+18+for+SQL+Server
+USE_KEY_VAULT=false
+# KEY_VAULT_NAME=nombre-keyvault
 ```
 
-### Scripts Auxiliares
+## Flujo de Integración y Workers
 
-El directorio [`scripts/`](scripts/) incluye utilidades para facilitar tareas comunes de desarrollo y despliegue. Algunos ejemplos:
-- `docker-setup.sh`: Inicializa el entorno Docker.
-- `docker-test.sh`: Ejecuta los tests en el entorno Docker.
-- `docker-deploy.sh`: Despliega la aplicación usando Docker.
-- `start-workers.sh`: Inicia los workers manualmente.
-- (Revisa cada script para más detalles sobre su uso.)
+1. ManyChat envía eventos a los webhooks de la API.
+2. Los eventos se encolan en Azure Storage Queue.
+3. Los workers (`workers/contact_processor.py`, `workers/campaign_processor.py`) procesan los mensajes y actualizan Azure SQL y Odoo.
+4. Los workers pueden ejecutarse con:
+   ```bash
+   python -m workers.contact_processor
+   python -m workers.campaign_processor
+   ```
 
-## Workers
+## Testing
 
-El directorio [`workers/`](workers/) contiene procesos de fondo:
-- [`queue_processor.py`](workers/queue_processor.py): Procesa eventos de la cola principal.
-- [`scheduled_sync.py`](workers/scheduled_sync.py): Realiza sincronizaciones periódicas entre sistemas.
-- [`campaign_processor.py`](workers/campaign_processor.py): Procesa campañas de marketing.
-- [`contact_processor.py`](workers/contact_processor.py): Procesa contactos de manera asíncrona.
+- Los tests usan variables de entorno cargadas desde `.env` o configuradas en CI/CD.
+- Usa `pytest` para ejecutar todos los tests:
+  ```bash
+  pytest
+  ```
+- Los mocks y configuraciones de test leen de variables de entorno, nunca valores hardcodeados.
 
-Para ejecutar un worker manualmente:
-```bash
-python -m workers.queue_processor
-python -m workers.scheduled_sync
-```
+## Monitoreo y Health
 
-## Health Check
+- Health checks disponibles en `/health` y `/api/v1/reports/health`.
+- Logs estructurados y utilidades de monitoreo en `app/utils/monitoring.py`.
 
-El endpoint `/health` verifica el estado de:
-- Base de datos
-- Conexión a Odoo
-- Estado de las colas de Azure
+## Despliegue y Seguridad
 
-Devuelve un JSON detallado con el estado de cada dependencia. Útil para integración con sistemas de monitoreo y orquestadores.
-
-## Testing y Cobertura
-
-Para ejecutar los tests y generar un reporte de cobertura:
-```bash
-pytest --cov=app tests/
-```
-El reporte se mostrará en consola. Para generar un reporte HTML:
-```bash
-pytest --cov=app --cov-report=html tests/
-```
-El resultado estará en el directorio `htmlcov/`.
-
-## Despliegue en Azure Functions
-
-La carpeta [`azure_function/`](azure_function/) contiene la configuración necesaria para desplegar la API como Azure Function. Si agregas nuevas dependencias, recuerda actualizar el archivo `requirements.txt` correspondiente y revisar los archivos `function.json` y `host.json` para reflejar los nuevos endpoints o triggers.
+- Usa Azure Key Vault para gestionar secretos en producción (`USE_KEY_VAULT=true`).
+- Configura variables de entorno en Azure Functions o App Service, nunca subas secretos al repo.
+- Consulta la sección de despliegue para detalles de Azure Functions y Docker.
