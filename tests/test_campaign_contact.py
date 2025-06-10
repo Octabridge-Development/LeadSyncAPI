@@ -31,7 +31,7 @@ def test_successful_update(client: TestClient, db_session: Session, create_test_
 
     update_data = {
         "manychat_id": contact.manychat_id,
-        "campaign_id": campaign_contact.campaign_id,
+        "campaign_id": campaign_contact.campaign_id,  # Ya es int
         "medical_advisor_id": advisor.id,
         "medical_assignment_date": datetime.now(timezone.utc).isoformat(),
         "last_state": "Assigned to Doctor"

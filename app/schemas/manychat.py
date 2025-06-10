@@ -23,9 +23,10 @@ class ManyChatContactEvent(BaseModel):
 class ManyChatCampaignAssignmentEvent(BaseModel):
     """
     Define el esquema para eventos de asignación de campaña de ManyChat.
+    campaign_id ahora es int para consistencia con la base de datos y el API.
     """
     manychat_id: str
-    campaign_id: str
+    campaign_id: int  # Cambiado de str a int
     comercial_id: Optional[str] = None
     medico_id: Optional[str] = None
     datetime_actual: datetime

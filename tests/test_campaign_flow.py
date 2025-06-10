@@ -64,7 +64,7 @@ async def test_campaign_assignment_flow():
         # --- ENVÍO EVENTO ---
         event = {
             "manychat_id": "test-lead-001",
-            "campaign_id": campaign.name,  # Usar el nombre, no el ID
+            "campaign_id": campaign.id,  # Usar el ID, no el nombre
             "comercial_id": str(advisor_id),
             "datetime_actual": "2025-06-03T12:00:00Z",
             "ultimo_estado": "asignado",

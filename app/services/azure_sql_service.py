@@ -76,8 +76,10 @@ class AzureSQLService:
                     # Por ahora, simplemente se informa y se levanta un error para un manejo explícito.
                     raise ValueError(f"Contact with manychat_id {event.manychat_id} not found for campaign assignment.")
 
-                # 2. Crear/buscar Campaign por campaign_id (asumiendo que event.campaign_id es el 'name' de la campaña) [cite: 3]
-                campaign = campaign_repo.get_or_create_by_name(event.campaign_id)
+                # 2. Buscar Campaign por campaign_id (ahora se espera que event.campaign_id sea int)
+                campaign = campaign_repo.get_by_id(event.campaign_id)
+                if not campaign:
+                    raise ValueError(f"Campaign with id {event.campaign_id} not found.")
 
                 # 3. Crear/buscar Advisor (comercial_id) [cite: 3]
                 commercial_advisor = None

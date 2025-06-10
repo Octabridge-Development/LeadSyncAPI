@@ -92,6 +92,10 @@ class CampaignRepository: # Agregado [cite: 5]
             self.db.refresh(campaign)
         return campaign
 
+    def get_by_id(self, campaign_id: int) -> Optional[Campaign]:
+        """Get campaign by integer ID."""
+        return self.db.query(Campaign).filter(Campaign.id == campaign_id).first()
+
 class AdvisorRepository: # Agregado [cite: 5]
     def __init__(self, db: Session):
         self.db = db

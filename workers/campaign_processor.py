@@ -14,7 +14,7 @@ Uso:
 Ejemplo de mensaje esperado en la cola:
     {
         "manychat_id": "123456",
-        "campaign_id": "camp-789",
+        "campaign_id": 789,  # Debe ser int
         "comercial_id": "advisor-001",
         "datetime_actual": "2024-05-27T12:34:56Z",
         "ultimo_estado": "asignado",
@@ -56,6 +56,13 @@ async def process_campaign_messages():
             
             if message:
                 event_data = json.loads(message.content)
+                # Forzar campaign_id a int si viene como string
+                if "campaign_id" in event_data and isinstance(event_data["campaign_id"], str):
+                    try:
+                        event_data["campaign_id"] = int(event_data["campaign_id"])
+                    except Exception:
+                        logger.error("campaign_id no es convertible a int", raw_value=event_data["campaign_id"])
+                        raise
                 # Crea la instancia del evento Pydantic
                 event = ManyChatCampaignAssignmentEvent(**event_data) 
                 

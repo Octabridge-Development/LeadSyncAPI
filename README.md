@@ -527,3 +527,51 @@ USE_KEY_VAULT=false
 - Usa Azure Key Vault para gestionar secretos en producción (`USE_KEY_VAULT=true`).
 - Configura variables de entorno en Azure Functions o App Service, nunca subas secretos al repo.
 - Consulta la sección de despliegue para detalles de Azure Functions y Docker.
+
+## Ejemplos de Uso de Endpoints Principales
+
+### 1. Webhook de Contacto
+**POST** `/api/v1/manychat/webhook/contact`
+```json
+{
+  "manychat_id": "MC99999",
+  "nombre_lead": "Ana",
+  "apellido_lead": "García",
+  "whatsapp": "+521234567891",
+  "datetime_suscripcion": "2025-06-10T10:00:00Z",
+  "datetime_actual": "2025-06-10T10:05:00Z",
+  "ultimo_estado": "Nuevo Lead",
+  "canal_entrada": "Facebook",
+  "estado_inicial": "Nuevo"
+}
+```
+
+### 2. Webhook de Asignación de Campaña
+**POST** `/api/v1/manychat/webhook/campaign-assignment`
+```json
+{
+  "manychat_id": "MC99999",
+  "campaign_id": 85,
+  "comercial_id": "700",
+  "medico_id": "101",
+  "datetime_actual": "2025-06-10T10:10:00Z",
+  "ultimo_estado": "Asignado a campaña",
+  "tipo_asignacion": "medico"
+}
+```
+
+### 3. Actualización de CampaignContact
+**PUT** `/api/v1/manychat/campaign-contacts/update-by-manychat-id`
+```json
+{
+  "manychat_id": "MC99999",
+  "campaign_id": 85,
+  "medical_advisor_id": 101,
+  "medical_assignment_date": "2025-06-10T11:00:00Z",
+  "last_state": "Asignado a médico"
+}
+```
+
+- Todos los endpoints requieren el header `X-API-KEY` con el valor configurado en `.env`.
+- Los IDs deben existir en la base de datos para que la operación sea exitosa.
+- El PUT solo actualiza registros existentes en `Campaign_Contact`.

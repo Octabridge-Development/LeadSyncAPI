@@ -173,7 +173,7 @@ async def receive_contact_event(
                         "status": "accepted",
                         "message": "Evento de campaña encolado exitosamente",
                         "manychat_id": "123456789",
-                        "campaign_id": "campaign_verano_2024",
+                        "campaign_id": 12345,  # Ahora int
                         "queue": "manychat-campaign-queue"
                     }
                 }
@@ -211,7 +211,7 @@ async def receive_campaign_assignment(
 
     **Campos del evento:**
     - `manychat_id`: ID del contacto en ManyChat (debe existir previamente)
-    - `campaign_id`: ID o nombre de la campaña
+    - `campaign_id`: ID de la campaña (entero)
     - `comercial_id`: ID del asesor comercial asignado (opcional)
     - `medico_id`: ID del asesor médico asignado (opcional)
     - `datetime_actual`: Fecha/hora de la asignación
@@ -238,7 +238,7 @@ async def receive_campaign_assignment(
                 detail="manychat_id no puede estar vacío"
             )
 
-        if not event.campaign_id or not event.campaign_id.strip():
+        if not event.campaign_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="campaign_id no puede estar vacío"
@@ -325,7 +325,7 @@ async def verify_webhook(
 
 # --- ¡INICIA EL NUEVO ENDPOINT PUT AQUÍ! ---
 @router.put(
-    "/campaign-contacts/update-by-manychat-id", # Ruta del nuevo endpoint
+    "/campaign-contacts/update-by-manychat-id",
     summary="Actualizar Campaign_Contact por ManyChat ID",
     description="""
     Actualiza un registro de Campaign_Contact asociado a un Contacto
@@ -333,17 +333,14 @@ async def verify_webhook(
     la fecha de asignación del médico y el último estado.
     Este endpoint se ejecuta de manera SÍNCRONA con la base de datos.
     """,
-    response_model=CampaignContactUpdate, # El modelo de respuesta puede ser el mismo que el de entrada
-                                         # si solo quieres confirmar los datos actualizados.
-                                         # Si quieres el objeto completo de CampaignContact,
-                                         # necesitarías un esquema de respuesta dedicado para CampaignContact.
+    response_model=CampaignContactUpdate,
     status_code=status.HTTP_200_OK,
-    tags=["Campaigns", "ManyChat Integration"] # Tags para organizar en la documentación de Swagger/OpenAPI
+    tags=["ManyChat Webhooks"],
 )
-def update_campaign_contact_endpoint( # Ya no es 'async def'
+def update_campaign_contact_endpoint(
     campaign_contact_data: CampaignContactUpdate, 
-    db: Session = Depends(get_db), # Cambiado a Session
-    api_key: str = Depends(verify_api_key) # Añadido el api_key como dependencia también para este endpoint
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_api_key)
 ):
     """
     Endpoint para actualizar campos específicos de un registro de Campaign_Contact.
