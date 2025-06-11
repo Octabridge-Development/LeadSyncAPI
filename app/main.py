@@ -1,7 +1,9 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from app.api.v1.router import router as api_v1_router
+# --- LÍNEA CORREGIDA AQUÍ ---
+from app.api.v1.router import api_router as api_v1_router # Cambiado 'router' por 'api_router'
+# ---------------------------
 from app.core.config import get_settings
 from app.core.logging import logger
 
