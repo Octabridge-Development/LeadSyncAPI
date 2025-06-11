@@ -62,3 +62,69 @@ yarn-error.log
 
 # Directorios de docker
 .docker/
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Archivos de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Archivos de entorno y configuración
+.env
+.env.*
+!.env.example
+*.log
+
+# IDEs y editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.DS_Store
+.coverage
+htmlcov/
+
+# Archivos temporales
+*.tmp
+*.bak
+*.cache
+.pytest_cache/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de logs
+logs/
+*.log
+
+# Archivos de dependencias
+node_modules/
+yarn-error.log
+
+# Archivos de base de datos local
+*.sqlite
+*.db
+
+# Tests
+/tests/__pycache__/
+/tests/*.pyc
+/tests/*.pyo
+/tests/*.pyd
+/tests/.pytest_cache/
+
+# Directorios de docker
+.docker/
+
+.env
