@@ -1,9 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-# --- LÍNEA CORREGIDA AQUÍ ---
-from app.api.v1.router import api_router as api_v1_router # Cambiado 'router' por 'api_router'
-# ---------------------------
+from app.api.v1.router import router as api_v1_router  # Línea corregida
 from app.core.config import get_settings
 from app.core.logging import logger
 
@@ -64,7 +62,6 @@ app.include_router(
     prefix=settings.API_V1_STR
 )
 
-
 # Endpoint raíz
 @app.get("/",
           summary="Endpoint raíz",
@@ -85,7 +82,6 @@ async def root():
         "openapi": "/openapi.json"
     }
 
-
 # Health check simple
 @app.get("/health",
           summary="Health Check simple",
@@ -101,7 +97,6 @@ async def health_check():
         "service": "MiaSalud Integration API",
         "detailed_health": "/api/v1/reports/health"
     }
-
 
 @app.on_event("startup")
 async def startup_event():
@@ -133,14 +128,12 @@ async def startup_event():
 
     logger.info("✅ API iniciada exitosamente")
 
-
 @app.on_event("shutdown")
 async def shutdown_event():
     """
     Ejecuta tareas de limpieza al cerrar la aplicación.
     """
     logger.info("👋 Cerrando MiaSalud Integration API...")
-
 
 # Manejo de excepciones personalizado
 @app.exception_handler(404)
@@ -162,7 +155,6 @@ async def not_found_handler(request: Request, exc):
             }
         }
     )
-
 
 @app.exception_handler(500)
 async def internal_error_handler(request: Request, exc):
