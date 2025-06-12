@@ -5,21 +5,21 @@ from typing import List
 # Asegúrate de que estas importaciones sean correctas para tu configuración
 from app.db.session import SessionLocal # Usado para Type Hinting si no se usa directamente
 from app.db import models
-from app.api import deps # Para get_db_session
+from app.api import deps # Para get_db
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactInDB # Asegúrate que sean correctas
 
 router = APIRouter()
 
 @router.get("/", response_model=List[ContactInDB], summary="Obtener todos los contactos")
-def read_contacts(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db_session)):
+def read_contacts(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
     """
     Obtiene una lista paginada de todos los contactos.
     """
-    contacts = db.query(models.Contact).offset(skip).limit(limit).all()
+    contacts = db.query(models.Contact).order_by(models.Contact.id).offset(skip).limit(limit).all()
     return contacts
 
 @router.get("/{contact_id}", response_model=ContactInDB, summary="Obtener contacto por ID")
-def read_contact(contact_id: int, db: Session = Depends(deps.get_db_session)):
+def read_contact(contact_id: int, db: Session = Depends(deps.get_db)):
     """
     Obtiene un contacto específico usando su ID.
     """
@@ -29,7 +29,7 @@ def read_contact(contact_id: int, db: Session = Depends(deps.get_db_session)):
     return contact
 
 @router.post("/", response_model=ContactInDB, status_code=status.HTTP_201_CREATED, summary="Crear un nuevo contacto")
-def create_contact(contact: ContactCreate, db: Session = Depends(deps.get_db_session)):
+def create_contact(contact: ContactCreate, db: Session = Depends(deps.get_db)):
     """
     Crea un nuevo contacto con la información proporcionada.
     Valida que 'manychat_id' sea único.
@@ -50,7 +50,7 @@ def create_contact(contact: ContactCreate, db: Session = Depends(deps.get_db_ses
     return db_contact
 
 @router.put("/{contact_id}", response_model=ContactInDB, summary="Actualizar contacto por ID")
-def update_contact(contact_id: int, contact_update: ContactUpdate, db: Session = Depends(deps.get_db_session)):
+def update_contact(contact_id: int, contact_update: ContactUpdate, db: Session = Depends(deps.get_db)):
     """
     Actualiza un contacto existente por su ID.
     Los campos no proporcionados en el cuerpo de la solicitud no serán modificados.
@@ -70,14 +70,16 @@ def update_contact(contact_id: int, contact_update: ContactUpdate, db: Session =
     return db_contact
 
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar contacto por ID")
-def delete_contact(contact_id: int, db: Session = Depends(deps.get_db_session)):
+def delete_contact(contact_id: int, db: Session = Depends(deps.get_db)):
     """
     Elimina un contacto específico usando su ID.
+    También elimina los estados relacionados en ContactState para evitar errores de integridad referencial.
     """
     db_contact = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
     if db_contact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contacto no encontrado")
-    
+    # Eliminar primero los estados relacionados
+    db.query(models.ContactState).filter(models.ContactState.contact_id == contact_id).delete(synchronize_session=False)
     db.delete(db_contact)
     db.commit()
     return {"message": "Contacto eliminado exitosamente"}

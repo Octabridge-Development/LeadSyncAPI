@@ -10,15 +10,15 @@ from app.schemas.advisor import AdvisorCreate, AdvisorUpdate, AdvisorInDB
 router = APIRouter()
 
 @router.get("/", response_model=List[AdvisorInDB], summary="Obtener todos los asesores")
-def read_advisors(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db_session)):
+def read_advisors(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
     """
     Obtiene una lista paginada de todos los asesores.
     """
-    advisors = db.query(models.Advisor).offset(skip).limit(limit).all()
+    advisors = db.query(models.Advisor).order_by(models.Advisor.id).offset(skip).limit(limit).all()
     return advisors
 
 @router.get("/{advisor_id}", response_model=AdvisorInDB, summary="Obtener asesor por ID")
-def read_advisor(advisor_id: int, db: Session = Depends(deps.get_db_session)):
+def read_advisor(advisor_id: int, db: Session = Depends(deps.get_db)):
     """
     Obtiene un asesor específico usando su ID.
     """
@@ -28,7 +28,7 @@ def read_advisor(advisor_id: int, db: Session = Depends(deps.get_db_session)):
     return advisor
 
 @router.post("/", response_model=AdvisorInDB, status_code=status.HTTP_201_CREATED, summary="Crear un nuevo asesor")
-def create_advisor(advisor_data: AdvisorCreate, db: Session = Depends(deps.get_db_session)):
+def create_advisor(advisor_data: AdvisorCreate, db: Session = Depends(deps.get_db)):
     """
     Crea un nuevo asesor con la información proporcionada.
     Valida que el 'email' sea único.
@@ -48,7 +48,7 @@ def create_advisor(advisor_data: AdvisorCreate, db: Session = Depends(deps.get_d
     return db_advisor
 
 @router.put("/{advisor_id}", response_model=AdvisorInDB, summary="Actualizar asesor por ID")
-def update_advisor(advisor_id: int, advisor_update: AdvisorUpdate, db: Session = Depends(deps.get_db_session)):
+def update_advisor(advisor_id: int, advisor_update: AdvisorUpdate, db: Session = Depends(deps.get_db)):
     """
     Actualiza un asesor existente por su ID.
     Los campos no proporcionados en el cuerpo de la solicitud no serán modificados.
@@ -67,7 +67,7 @@ def update_advisor(advisor_id: int, advisor_update: AdvisorUpdate, db: Session =
     return db_advisor
 
 @router.delete("/{advisor_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar asesor por ID")
-def delete_advisor(advisor_id: int, db: Session = Depends(deps.get_db_session)):
+def delete_advisor(advisor_id: int, db: Session = Depends(deps.get_db)):
     """
     Elimina un asesor específico usando su ID.
     """

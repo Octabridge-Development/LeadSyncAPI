@@ -10,15 +10,15 @@ from app.schemas.campaign import CampaignCreate, CampaignUpdate, CampaignInDB
 router = APIRouter()
 
 @router.get("/", response_model=List[CampaignInDB], summary="Obtener todas las campañas")
-def read_campaigns(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db_session)):
+def read_campaigns(skip: int = 0, limit: int = 100, db: Session = Depends(deps.get_db)):
     """
     Obtiene una lista paginada de todas las campañas.
     """
-    campaigns = db.query(models.Campaign).offset(skip).limit(limit).all()
+    campaigns = db.query(models.Campaign).order_by(models.Campaign.id).offset(skip).limit(limit).all()
     return campaigns
 
 @router.get("/{campaign_id}", response_model=CampaignInDB, summary="Obtener campaña por ID")
-def read_campaign(campaign_id: int, db: Session = Depends(deps.get_db_session)):
+def read_campaign(campaign_id: int, db: Session = Depends(deps.get_db)):
     """
     Obtiene una campaña específica usando su ID.
     """
@@ -28,7 +28,7 @@ def read_campaign(campaign_id: int, db: Session = Depends(deps.get_db_session)):
     return campaign
 
 @router.post("/", response_model=CampaignInDB, status_code=status.HTTP_201_CREATED, summary="Crear una nueva campaña")
-def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(deps.get_db_session)):
+def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(deps.get_db)):
     """
     Crea una nueva campaña con la información proporcionada.
     """
@@ -39,7 +39,7 @@ def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(deps.ge
     return db_campaign
 
 @router.put("/{campaign_id}", response_model=CampaignInDB, summary="Actualizar campaña por ID")
-def update_campaign(campaign_id: int, campaign_update: CampaignUpdate, db: Session = Depends(deps.get_db_session)):
+def update_campaign(campaign_id: int, campaign_update: CampaignUpdate, db: Session = Depends(deps.get_db)):
     """
     Actualiza una campaña existente por su ID.
     Los campos no proporcionados en el cuerpo de la solicitud no serán modificados.
@@ -60,7 +60,7 @@ def update_campaign(campaign_id: int, campaign_update: CampaignUpdate, db: Sessi
 # NOTA: En tu solicitud original NO pediste DELETE para Campaign,
 # pero lo incluí aquí por consistencia con un CRUD completo. Puedes comentarlo si no lo necesitas.
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar campaña por ID (opcional)")
-def delete_campaign(campaign_id: int, db: Session = Depends(deps.get_db_session)):
+def delete_campaign(campaign_id: int, db: Session = Depends(deps.get_db)):
     """
     Elimina una campaña específica usando su ID.
     """
