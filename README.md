@@ -175,6 +175,97 @@ miasalud-integration/
 - **schemas/campaign_contact.py**: Esquemas para actualización y serialización de CampaignContact.
 - **services/campaign_contact_service.py**: Lógica de negocio para actualización y consulta por ManyChat ID.
 
+### 11. CRUD de Asesores (Advisor)
+
+- **endpoints/advisor.py**: Endpoints RESTful para crear, listar, obtener, actualizar y eliminar asesores.
+- **schemas/advisor.py**: Esquemas Pydantic para validación y serialización de asesores.
+- **models.py**: Modelo SQLAlchemy `Advisor` para la tabla de asesores.
+
+### 12. CRUD de Campañas (Campaign)
+
+- **endpoints/campaign.py**: Endpoints RESTful para crear, listar (con paginación y orden requerido por MSSQL), obtener, actualizar y eliminar campañas.
+- **schemas/campaign.py**: Esquemas Pydantic para validación y serialización de campañas.
+- **models.py**: Modelo SQLAlchemy `Campaign` para la tabla de campañas.
+
+### 13. CRUD de Contactos (Contact)
+
+- **endpoints/contact.py**: Endpoints RESTful para crear, listar (con paginación y orden requerido por MSSQL), obtener, actualizar y eliminar contactos.
+- **schemas/contact.py**: Esquemas Pydantic para validación y serialización de contactos.
+- **models.py**: Modelo SQLAlchemy `Contact` para la tabla de contactos.
+
+---
+
+## Cambios y Mejoras Recientes
+
+- Todos los endpoints paginados (Contact, Campaign, Advisor) ahora cumplen con el requerimiento de MSSQL agregando `.order_by(id)` en las consultas con `offset/limit`.
+- Unificación de dependencias de base de datos: todos los endpoints usan `Depends(deps.get_db)` para evitar errores de generador y asegurar el manejo correcto de la sesión.
+- Validación de claves foráneas en la creación de Campaign y Contact: se recomienda usar IDs válidos existentes en la base de datos.
+- Mejoras en la documentación de Swagger: tags unificados y ejemplos de uso claros.
+- Ejemplos de payloads y uso de endpoints actualizados en la sección de ejemplos.
+- Actualización de README con estructura, dependencias y ejemplos de uso para todos los recursos principales (ManyChat, Channel, Campaign, Contact, Advisor, CampaignContact).
+- Corrección de errores comunes de integridad referencial y autenticación en Azure Storage.
+- Pruebas automatizadas actualizadas y fixtures corregidos para cumplir con restricciones de la base de datos.
+
+---
+
+## Ejemplos de Uso de Endpoints CRUD
+
+### 4. CRUD de Campañas
+**POST** `/api/v1/campaigns/`
+```json
+{
+  "name": "Campaña Invierno 2025",
+  "date_start": "2025-06-12T14:49:28.163Z",
+  "date_end": "2025-12-31T23:59:59.000Z",
+  "budget": 50000,
+  "status": "Activa",
+  "channel_id": 1
+}
+```
+
+### 5. CRUD de Canales
+**POST** `/api/v1/channels/`
+```json
+{
+  "name": "Facebook Messenger",
+  "description": "Canal oficial de Facebook"
+}
+```
+
+### 6. CRUD de Contactos
+**POST** `/api/v1/contacts/`
+```json
+{
+  "manychat_id": "MC12345",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "whatsapp": "+521234567890",
+  "address_id": null,
+  "channel_id": 1
+}
+```
+
+### 7. CRUD de Asesores
+**POST** `/api/v1/advisors/`
+```json
+{
+  "name": "Dra. Laura",
+  "email": "laura@ejemplo.com",
+  "phone": "+521234567891"
+}
+```
+
+---
+
+## Notas Técnicas
+
+- Todos los endpoints que usan paginación requieren `.order_by(id)` para funcionar correctamente en SQL Server.
+- Los IDs de claves foráneas deben existir en la base de datos para evitar errores de integridad.
+- Todos los endpoints protegidos requieren el header `X-API-KEY`.
+- La documentación Swagger está unificada y actualizada para todos los recursos principales.
+
+---
+
 ## Configuración del Entorno
 
 ### Archivo .env
@@ -581,6 +672,55 @@ USE_KEY_VAULT=false
   "medical_advisor_id": 101,
   "medical_assignment_date": "2025-06-10T11:00:00Z",
   "last_state": "Asignado a médico"
+}
+```
+
+- Todos los endpoints requieren el header `X-API-KEY` con el valor configurado en `.env`.
+- Los IDs deben existir en la base de datos para que la operación sea exitosa.
+- El PUT solo actualiza registros existentes en `Campaign_Contact`.
+
+### 4. CRUD de Campañas
+**POST** `/api/v1/campaigns/`
+```json
+{
+  "name": "Campaña Invierno 2025",
+  "date_start": "2025-06-12T14:49:28.163Z",
+  "date_end": "2025-12-31T23:59:59.000Z",
+  "budget": 50000,
+  "status": "Activa",
+  "channel_id": 1
+}
+```
+
+### 5. CRUD de Canales
+**POST** `/api/v1/channels/`
+```json
+{
+  "name": "Facebook Messenger",
+  "description": "Canal oficial de Facebook"
+}
+```
+
+### 6. CRUD de Contactos
+**POST** `/api/v1/contacts/`
+```json
+{
+  "manychat_id": "MC12345",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "whatsapp": "+521234567890",
+  "address_id": null,
+  "channel_id": 1
+}
+```
+
+### 7. CRUD de Asesores
+**POST** `/api/v1/advisors/`
+```json
+{
+  "name": "Dra. Laura",
+  "email": "laura@ejemplo.com",
+  "phone": "+521234567891"
 }
 ```
 
