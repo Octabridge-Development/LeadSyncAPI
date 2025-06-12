@@ -163,6 +163,18 @@ miasalud-integration/
 - **function.json**: Configura los disparadores y enlaces de la Azure Function.
 - **host.json**: Configuración general para el host de Azure Functions.
 
+### 9. CRUD de Canales (Channel)
+
+- **endpoints/channel.py**: Endpoints RESTful para crear, listar, obtener, actualizar y eliminar canales de contacto.
+- **schemas/channel.py**: Esquemas Pydantic para validación y serialización de canales.
+- **models.py**: Modelo SQLAlchemy `Channel` para la tabla de canales.
+
+### 10. CampaignContact por ManyChat ID
+
+- **endpoints/campaign_contact.py**: Endpoints para obtener y actualizar CampaignContact por ManyChat ID (GET/PUT), permitiendo operaciones masivas y búsqueda eficiente.
+- **schemas/campaign_contact.py**: Esquemas para actualización y serialización de CampaignContact.
+- **services/campaign_contact_service.py**: Lógica de negocio para actualización y consulta por ManyChat ID.
+
 ## Configuración del Entorno
 
 ### Archivo .env

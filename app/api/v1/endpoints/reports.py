@@ -12,8 +12,7 @@ from app.utils.monitoring import log_dependency_health
 from app.core.logging import logger
 
 router = APIRouter(
-    prefix="/reports",
-    tags=["Reports & Health"],
+    tags=["Reports"],
     responses={
         401: {
             "description": "No autorizado - API Key inválido o faltante",

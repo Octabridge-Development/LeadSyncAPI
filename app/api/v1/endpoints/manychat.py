@@ -18,9 +18,9 @@ from app.services.campaign_contact_service import CampaignContactService # Tu nu
 from app.db.session import get_db # Tu función para obtener la sesión de DB
 # -------------------------------------------------------------
 
+# Quitar prefix="/manychat" del APIRouter
 router = APIRouter(
-    prefix="/manychat",
-    tags=["ManyChat Webhooks"],
+    tags=["ManyChat"],  # Cambiado para evitar duplicidad en Swagger
     responses={
         401: {
             "description": "No autorizado - API Key inválido o faltante",
@@ -335,7 +335,7 @@ async def verify_webhook(
     """,
     response_model=CampaignContactUpdate,
     status_code=status.HTTP_200_OK,
-    tags=["ManyChat Webhooks"],
+    tags=["ManyChat"],
 )
 def update_campaign_contact_endpoint(
     campaign_contact_data: CampaignContactUpdate, 
