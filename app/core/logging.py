@@ -5,6 +5,9 @@ import structlog
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 import uuid
+# --- INICIO DE LA MODIFICACIÓN ---
+from opencensus.ext.azure.log_exporter import AzureLogHandler
+# --- FIN DE LA MODIFICACIÓN ---
 
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
@@ -42,3 +45,17 @@ logging.basicConfig(
 )
 
 logger = structlog.get_logger()
+
+# --- INICIO DE LA MODIFICACIÓN ---
+# Tarea 8: Solución para configurar logging para Azure Application Insights 
+# Revisa si la clave de Application Insights está disponible como variable de entorno
+app_insights_key = os.getenv('APPINSIGHTS_INSTRUMENTATION_KEY')
+if app_insights_key:
+    # Si la clave existe, agrega el manejador de logs de Azure
+    handler = AzureLogHandler(
+        connection_string=f'InstrumentationKey={app_insights_key}'
+    )
+    # Adjunta el manejador al logger raíz de Python para capturar todos los logs
+    logging.getLogger().addHandler(handler)
+    logger.info("✅ Logging para Application Insights configurado.")
+# --- FIN DE LA MODIFICACIÓN ---

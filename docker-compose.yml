@@ -5,14 +5,14 @@ services:
     container_name: miasalud_database
     environment:
       ACCEPT_EULA: "Y"
-      SA_PASSWORD: "MiaSalud123**"
+      SA_PASSWORD: "${SA_PASSWORD}" # CORREGIDO
       MSSQL_PID: "Developer"
     ports:
       - "1433:1433"
     volumes:
       - sqlserver_data:/var/opt/mssql
     healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "MiaSalud123**" -Q "SELECT 1" || exit 1
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "${SA_PASSWORD}" -Q "SELECT 1" || exit 1 # CORREGIDO
       interval: 10s
       timeout: 3s
       retries: 10
@@ -20,7 +20,7 @@ services:
     networks:
       - miasalud_network
 
-  # Redis para colas (alternativa a Azure Storage en desarrollo)
+  # Redis para colas
   redis:
     image: redis:7-alpine
     container_name: miasalud_redis
@@ -45,13 +45,13 @@ services:
     container_name: miasalud_api
     environment:
       - DEBUG=true
-      - API_KEY=Miasaludnatural123**
-      - DATABASE_URL=mssql+pyodbc://sa:MiaSalud123**@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
-      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=devstorageaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstorageaccount1;QueueEndpoint=http://127.0.0.1:10001/devstorageaccount1;
+      - API_KEY=${API_KEY} # CORREGIDO
+      - DATABASE_URL=mssql+pyodbc://sa:${SA_PASSWORD}@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes # CORREGIDO
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # CORREGIDO
       - ODOO_URL=https://ironsolutionbd.odoo.com
       - ODOO_DB=ironsolutionbd
       - ODOO_USERNAME=sistemas@miasaludnatural.com
-      - ODOO_PASSWORD=Mia123**
+      - ODOO_PASSWORD=${ODOO_PASSWORD} # CORREGIDO
     volumes:
       - ./app:/app/app
       - ./workers:/app/workers
@@ -74,8 +74,8 @@ services:
     container_name: miasalud_workers
     environment:
       - DEBUG=true
-      - DATABASE_URL=mssql+pyodbc://sa:MiaSalud123**@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes
-      - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=devstorageaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://127.0.0.1:10000/devstorageaccount1;QueueEndpoint=http://127.0.0.1:10001/devstorageaccount1;
+      - DATABASE_URL=mssql+pyodbc://sa:${SA_PASSWORD}@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes # CORREGIDO
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # CORREGIDO
     volumes:
       - ./app:/app/app
       - ./workers:/app/workers
@@ -86,14 +86,14 @@ services:
     networks:
       - miasalud_network
 
-  # Azurite para emular Azure Storage en desarrollo
+  # Azurite para emular Azure Storage
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite
     container_name: miasalud_azurite
     ports:
-      - "10000:10000" # Blob service
-      - "10001:10001" # Queue service
-      - "10002:10002" # Table service
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
     volumes:
       - azurite_data:/data
     command: azurite --loose --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
