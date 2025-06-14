@@ -1,4 +1,138 @@
-# Python cache files
+.env
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Archivos de Python
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Archivos de entorno y configuración
+.env
+.env.*
+!.env.example
+*.log
+
+# IDEs y editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.DS_Store
+.coverage
+htmlcov/
+
+# Archivos temporales
+*.tmp
+*.bak
+*.cache
+.pytest_cache/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de logs
+logs/
+*.log
+
+# Archivos de dependencias
+node_modules/
+yarn-error.log
+
+# Archivos de base de datos local
+*.sqlite
+*.db
+
+# Tests
+/tests/__pycache__/
+/tests/*.pyc
+/tests/*.pyo
+/tests/*.pyd
+/tests/.pytest_cache/
+
+# Directorios de docker
+.docker/
+# Entorno virtual
+.venv/
+venv/
+env/
+
+# Archivos de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Archivos de entorno y configuración
+.env
+.env.*
+!.env.example
+*.log
+
+# IDEs y editores
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.DS_Store
+.coverage
+htmlcov/
+
+# Archivos temporales
+*.tmp
+*.bak
+*.cache
+.pytest_cache/
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de logs
+logs/
+*.log
+
+# Archivos de dependencias
+node_modules/
+yarn-error.log
+
+# Archivos de base de datos local
+*.sqlite
+*.db
+
+# Tests
+/tests/__pycache__/
+/tests/*.pyc
+/tests/*.pyo
+/tests/*.pyd
+/tests/.pytest_cache/
+
+# Directorios de docker
+.docker/
+
+.env
+
+app/__pycache__/__init__.cpython-311.pyc
+app/__pycache__/main.cpython-311.pyc
+app/core/__pycache__/__init__.cpython-311.pyc
+app/core/__pycache__/config.cpython-311.pyc
+app/core/__pycache__/logging.cpython-311.pyc
+app/services/__pycache__/__init__.cpython-311.pyc

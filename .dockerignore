@@ -1,0 +1,39 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Test cache
+.pytest_cache/
+
+# Environment files
+.env
+.env.*
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+README.md
+docs/
+
+# Coverage
+htmlcov/
+.tox/
+coverage.xml
+
+# Misc
+*.so

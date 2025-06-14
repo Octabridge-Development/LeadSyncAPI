@@ -44,10 +44,10 @@ def check_database_health(db: Session) -> Dict[str, Any]:
 
         # Obtener estadísticas básicas
         stats_result = db.execute(text("""
-                                       SELECT (SELECT COUNT(*) FROM Contact)       as total_contacts,
-                                              (SELECT COUNT(*) FROM Contact_State) as total_states,
-                                              (SELECT COUNT(*) FROM Channel)       as total_channels
-                                       """))
+                                    SELECT (SELECT COUNT(*) FROM Contact)       as total_contacts,
+                                           (SELECT COUNT(*) FROM Contact_State) as total_states,
+                                           (SELECT COUNT(*) FROM Channel)       as total_channels
+                                    """))
         stats = stats_result.fetchone()
 
         log_dependency_health("database", "ok")
@@ -294,27 +294,27 @@ async def get_statistics(
     try:
         # Estadísticas de contactos
         contacts_stats = db.execute(text("""
-                                         SELECT COUNT(*)                                                                as total,
-                                                COUNT(CASE WHEN entry_date >= DATEADD(hour, -24, GETDATE()) THEN 1 END) as recent_24h
-                                         FROM Contact
-                                         """)).fetchone()
+                                          SELECT COUNT(*)                                                           as total,
+                                                 COUNT(CASE WHEN entry_date >= DATEADD(hour, -24, GETDATE()) THEN 1 END) as recent_24h
+                                          FROM Contact
+                                          """)).fetchone()
 
         # Contactos por canal
         channel_stats = db.execute(text("""
-                                        SELECT c.name as channel_name, COUNT(con.id) as count
-                                        FROM Contact con
-                                            LEFT JOIN Channel c
-                                        ON con.channel_id = c.id
-                                        GROUP BY c.name
-                                        """)).fetchall()
+                                         SELECT c.name as channel_name, COUNT(con.id) as count
+                                         FROM Contact con
+                                             LEFT JOIN Channel c
+                                         ON con.channel_id = c.id
+                                         GROUP BY c.name
+                                         """)).fetchall()
 
         # Estados más comunes
         state_stats = db.execute(text("""
-                                      SELECT TOP 10 state, COUNT(*) as count
-                                      FROM Contact_State
-                                      GROUP BY state
-                                      ORDER BY count DESC
-                                      """)).fetchall()
+                                        SELECT TOP 10 state, COUNT(*) as count
+                                        FROM Contact_State
+                                        GROUP BY state
+                                        ORDER BY count DESC
+                                        """)).fetchall()
 
         # Obtener información de colas
         queue_info = check_queue_health(queue_service)

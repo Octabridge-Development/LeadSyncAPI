@@ -1,13 +1,19 @@
+# app/core/logging.py
 import logging
 import sys
-import os
 import structlog
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 import uuid
+from opencensus.ext.azure.log_exporter import AzureLogHandler
+from app.core.config import get_settings # <-- IMPORTANTE: Se importa la configuración
 
-LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
-LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
+# 1. Obtenemos la configuración centralizada
+settings = get_settings()
+
+# 2. Usamos las variables desde el objeto de settings
+LOG_LEVEL = settings.LOG_LEVEL.upper()
+LOG_FORMAT = settings.LOG_FORMAT
 
 # Configuración de structlog para logging estructurado
 structlog.configure(
@@ -42,3 +48,11 @@ logging.basicConfig(
 )
 
 logger = structlog.get_logger()
+
+# 3. La configuración de Azure Insights también usa el objeto settings
+if settings.APPINSIGHTS_INSTRUMENTATION_KEY:
+    handler = AzureLogHandler(
+        connection_string=f'InstrumentationKey={settings.APPINSIGHTS_INSTRUMENTATION_KEY}'
+    )
+    logging.getLogger().addHandler(handler)
+    logger.info("✅ Logging para Application Insights configurado desde la configuración central.")

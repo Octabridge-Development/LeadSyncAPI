@@ -9,6 +9,7 @@
 6. [Guía de Desarrollo](#guía-de-desarrollo)
 7. [Despliegue](#despliegue)
 8. [Requirements](#requirements)
+9. [Desarrollo con Docker](#desarrollo-con-docker)
 
 ## Visión General
 
@@ -323,3 +324,342 @@ Este archivo de requirements incluye todas las dependencias necesarias para:
 - Comunicación con Odoo vía JSON-RPC
 - Seguridad, autenticación y validación
 - Pruebas automatizadas
+
+## Desarrollo con Docker 🐳
+
+### Quick Start
+
+```bash
+# Setup inicial
+./scripts/docker-setup.sh
+
+# Verificar que todo funciona
+./scripts/docker-test.sh
+
+# Ver logs en tiempo real
+docker-compose logs -f api
+
+# Ejecutar tests
+docker-compose run --rm api pytest
+
+# Reconstruir imagen
+docker-compose build api
+
+# Entrar al contenedor
+docker-compose exec api bash
+```
+
+### Entorno de Desarrollo
+
+El entorno de desarrollo está configurado para proporcionar:
+- Hot-reload para desarrollo rápido
+- PostgreSQL para desarrollo local
+- Workers procesando eventos en background
+- Volúmenes montados para edición en tiempo real
+
+### Entorno de Producción
+
+Para desplegar en producción:
+
+```bash
+# Desplegar servicios
+docker-compose -f docker/docker-compose.prod.yml up -d
+
+# Verificar estado
+docker-compose -f docker/docker-compose.prod.yml ps
+
+# Ver logs
+docker-compose -f docker/docker-compose.prod.yml logs -f
+```
+
+Características del entorno de producción:
+- Imágenes optimizadas (< 500MB)
+- Health checks configurados
+- Logs centralizados
+- TLS habilitado
+- Reinicio automático en caso de fallos
+
+### Verificación del Sistema
+
+Para verificar que todo funciona correctamente:
+
+1. Health check debe retornar 200:
+```bash
+curl -f http://localhost:8000/health
+```
+
+2. Probar el endpoint principal:
+```bash
+curl -X POST "http://localhost:8000/api/v1/manychat/webhook/contact" \
+     -H "Content-Type: application/json" \
+     -H "X-API-KEY: your-api-key" \
+     -d '{"manychat_id": "test", "nombre_lead": "Test", "datetime_actual": "2024-05-01"}'
+```
+
+3. Verificar logs de workers:
+```bash
+docker-compose logs -f workers
+```
+
+## Criterios de Éxito 🎯
+
+### Funcionalidad Básica
+- [ ] `docker-compose up` arranca todos los servicios
+- [ ] API responde en `http://localhost:8000`
+- [ ] Health check retorna 200
+- [ ] Base de datos acepta conexiones
+- [ ] Workers procesan eventos correctamente
+
+### Testing
+- [ ] `./scripts/docker-test.sh` pasa todos los tests
+- [ ] Endpoints POST retornan 202
+- [ ] Base de datos persiste datos entre reinicios
+- [ ] Hot-reload funciona en desarrollo
+
+### Producción
+- [ ] `docker-compose.prod.yml` funciona
+- [ ] Imágenes optimizadas (< 500MB)
+- [ ] Health checks configurados
+- [ ] Logs centralizados
+
+## Guía de Verificación
+
+1. Verificar servicios:
+```bash
+docker-compose ps
+```
+
+2. Verificar logs:
+```bash
+docker-compose logs -f
+```
+
+3. Verificar conexión a base de datos:
+```bash
+docker-compose exec api python -c "from app.db.session import check_database_connection; check_database_connection()"
+```
+
+4. Verificar workers:
+```bash
+docker-compose logs workers | grep "Processing"
+```
+
+## Endpoints Principales
+
+### ManyChat Webhooks
+
+- `POST /api/v1/manychat/webhook/contact`  
+  Recibe eventos de contacto desde ManyChat y los encola para procesamiento asíncrono.
+  - Requiere header `X-API-KEY`.
+  - Body: `ManyChatContactEvent`
+
+- `POST /api/v1/manychat/webhook/campaign-assignment`  
+  Recibe asignaciones de campaña y asesores desde ManyChat y los encola para procesamiento asíncrono.
+  - Requiere header `X-API-KEY`.
+  - Body: `ManyChatCampaignAssignmentEvent`
+
+- `PUT /api/v1/manychat/campaign-contacts/update-by-manychat-id`  
+  Permite actualizar campos específicos de un registro de Campaign_Contact usando el ManyChat ID y, opcionalmente, el campaign_id.  
+  - Requiere header `X-API-KEY`.
+  - Body: `{ manychat_id, campaign_id?, medical_advisor_id?, medical_assignment_date?, last_state? }`
+  - Responde con los datos actualizados o error detallado.
+
+- `GET /api/v1/manychat/webhook/verify`  
+  Endpoint de verificación para ManyChat (útil para pruebas de integración).
+
+### Health y Reportes
+
+- `GET /health`  
+  Health check simple de la API.
+- `GET /api/v1/reports/health`  
+  Health check completo (requiere `X-API-KEY`).
+
+## Seguridad y Variables de Entorno
+
+- **Nunca subas tu archivo `.env` real al repositorio.** Usa `.env.example` para compartir la estructura de variables necesarias.
+- Las credenciales y claves deben ser gestionadas mediante variables de entorno o Azure Key Vault en producción.
+- Todos los endpoints protegidos requieren el header `X-API-KEY`.
+
+### Ejemplo de `.env.example`
+
+```
+DEBUG=true
+API_KEY=tu-api-key
+API_V1_STR=/api/v1
+ODOO_URL=https://tu-odoo.com
+ODOO_DB=nombre_db
+ODOO_USERNAME=usuario@dominio.com
+ODOO_PASSWORD=clave_odoo
+ODOO_RATE_LIMIT=1.0
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=cuenta;AccountKey=clave;EndpointSuffix=core.windows.net
+DATABASE_URL=mssql+pyodbc://usuario:password@servidor.database.windows.net:1433/basedatos?driver=ODBC+Driver+18+for+SQL+Server
+USE_KEY_VAULT=false
+# KEY_VAULT_NAME=nombre-keyvault
+```
+
+## Flujo de Integración y Workers
+
+1. ManyChat envía eventos a los webhooks de la API.
+2. Los eventos se encolan en Azure Storage Queue.
+3. Los workers (`workers/contact_processor.py`, `workers/campaign_processor.py`) procesan los mensajes y actualizan Azure SQL y Odoo.
+4. Los workers pueden ejecutarse con:
+   ```bash
+   python -m workers.contact_processor
+   python -m workers.campaign_processor
+   ```
+
+## Testing
+
+- Los tests usan variables de entorno cargadas desde `.env` o configuradas en CI/CD.
+- Usa `pytest` para ejecutar todos los tests:
+  ```bash
+  pytest
+  ```
+- Los mocks y configuraciones de test leen de variables de entorno, nunca valores hardcodeados.
+
+## Monitoreo y Health
+
+- Health checks disponibles en `/health` y `/api/v1/reports/health`.
+- Logs estructurados y utilidades de monitoreo en `app/utils/monitoring.py`.
+
+## Despliegue y Seguridad
+
+- Usa Azure Key Vault para gestionar secretos en producción (`USE_KEY_VAULT=true`).
+- Configura variables de entorno en Azure Functions o App Service, nunca subas secretos al repo.
+- Consulta la sección de despliegue para detalles de Azure Functions y Docker.
+
+## Estado actual del despliegue y configuración
+
+### Punto de entrada para producción
+- El punto de entrada único es `app/main.py`.
+- Existe un archivo `wsgi.py` en la raíz para compatibilidad con Gunicorn/Azure App Service.
+- Archivo `gunicorn.conf.py` presente con configuración recomendada para producción.
+
+### Dockerización y Workers
+- El proyecto incluye `docker/Dockerfile.workers` para los workers.
+- El servicio `workers` está definido en `docker-compose.yml` y `docker/docker-compose.prod.yml`.
+- El comando por defecto de los workers es: `python -m workers.queue_processor`.
+
+### Variables de entorno y configuración
+- `.env.production` creado con las variables clave para producción.
+- `requirements.txt` actualizado con dependencias para Azure y Gunicorn.
+
+### Despliegue
+- Para desarrollo y pruebas locales, usar `docker-compose.yml`.
+- Para producción, usar `docker/docker-compose.prod.yml`.
+- Para App Service en Azure, usar el comando de arranque:
+  ```bash
+  gunicorn wsgi:app --config gunicorn.conf.py
+  ```
+- Para workers en Azure Container Instances, construir la imagen con:
+  ```bash
+  docker build -f docker/Dockerfile.workers -t miasalud/workers:latest .
+  # Subir a ACR y desplegar según la documentación de Azure
+  ```
+
+---
+
+## Archivos clave agregados o modificados recientemente
+- `wsgi.py`: punto de entrada para Gunicorn/Azure
+- `gunicorn.conf.py`: configuración de Gunicorn
+- `docker/Dockerfile.workers`: Dockerfile para workers
+- `.env.production`: variables de entorno para producción
+- `requirements.txt`: dependencias para Azure y producción
+
+---
+
+## Ejemplos de Uso de Endpoints Principales
+
+### 1. Webhook de Contacto
+**POST** `/api/v1/manychat/webhook/contact`
+```json
+{
+  "manychat_id": "MC99999",
+  "nombre_lead": "Ana",
+  "apellido_lead": "García",
+  "whatsapp": "+521234567891",
+  "datetime_suscripcion": "2025-06-10T10:00:00Z",
+  "datetime_actual": "2025-06-10T10:05:00Z",
+  "ultimo_estado": "Nuevo Lead",
+  "canal_entrada": "Facebook",
+  "estado_inicial": "Nuevo"
+}
+```
+
+### 2. Webhook de Asignación de Campaña
+**POST** `/api/v1/manychat/webhook/campaign-assignment`
+```json
+{
+  "manychat_id": "MC99999",
+  "campaign_id": 85,
+  "comercial_id": "700",
+  "medico_id": "101",
+  "datetime_actual": "2025-06-10T10:10:00Z",
+  "ultimo_estado": "Asignado a campaña",
+  "tipo_asignacion": "medico"
+}
+```
+
+### 3. Actualización de CampaignContact
+**PUT** `/api/v1/manychat/campaign-contacts/update-by-manychat-id`
+```json
+{
+  "manychat_id": "MC99999",
+  "campaign_id": 85,
+  "medical_advisor_id": 101,
+  "medical_assignment_date": "2025-06-10T11:00:00Z",
+  "last_state": "Asignado a médico"
+}
+```
+
+- Todos los endpoints requieren el header `X-API-KEY` con el valor configurado en `.env`.
+- Los IDs deben existir en la base de datos para que la operación sea exitosa.
+- El PUT solo actualiza registros existentes en `Campaign_Contact`.
+
+### 4. CRUD de Campañas
+**POST** `/api/v1/campaigns/`
+```json
+{
+  "name": "Campaña Invierno 2025",
+  "date_start": "2025-06-12T14:49:28.163Z",
+  "date_end": "2025-12-31T23:59:59.000Z",
+  "budget": 50000,
+  "status": "Activa",
+  "channel_id": 1
+}
+```
+
+### 5. CRUD de Canales
+**POST** `/api/v1/channels/`
+```json
+{
+  "name": "Facebook Messenger",
+  "description": "Canal oficial de Facebook"
+}
+```
+
+### 6. CRUD de Contactos
+**POST** `/api/v1/contacts/`
+```json
+{
+  "manychat_id": "MC12345",
+  "nombre": "Juan",
+  "apellido": "Pérez",
+  "whatsapp": "+521234567890",
+  "address_id": null,
+  "channel_id": 1
+}
+```
+
+### 7. CRUD de Asesores
+**POST** `/api/v1/advisors/`
+```json
+{
+  "name": "Dra. Laura",
+  "email": "laura@ejemplo.com",
+  "phone": "+521234567891"
+}
+```
+
+- Todos los endpoints requieren el header `X-API-KEY` con el valor configurado en `.env`.
+- Los IDs deben existir en la base de datos para que la operación sea exitosa.
