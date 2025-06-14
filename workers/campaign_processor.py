@@ -1,7 +1,7 @@
 # workers/campaign_processor.py
 import asyncio
 import json
-from app.services.queue_service import QueueService, QueueServiceError, QueueNotFoundError
+from app.services.queue_service import QueueService, QueueServiceError
 from app.services.azure_sql_service import AzureSQLService
 from app.schemas.manychat import ManyChatCampaignAssignmentEvent
 from app.core.logging import logger
@@ -48,7 +48,7 @@ async def process_campaign_messages(queue_service: QueueService, azure_sql_servi
                 # No hay mensajes, espera un poco más
                 await asyncio.sleep(2)
 
-        except (QueueNotFoundError, QueueServiceError) as e:
+        except QueueServiceError as e:
             logger.error(f"Error de servicio de colas: {e}. Reintentando en 10 segundos.", exc_info=True)
             await asyncio.sleep(10)
         except json.JSONDecodeError:

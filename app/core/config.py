@@ -71,11 +71,9 @@ def get_settings() -> Settings:
     """
     print("INFO: Inicializando configuración de la aplicación...")
     settings = Settings()
-    try:
+    # Solo cargar secretos de Key Vault si USE_KEY_VAULT es True
+    if getattr(settings, "USE_KEY_VAULT", False):
         settings.load_secrets_from_key_vault()
-    except IOError as e:
-        print(f"CRITICAL: Error fatal de configuración: {e}")
-        raise
         
     print("INFO: Configuración cargada exitosamente.")
     return settings
