@@ -1,461 +1,107 @@
 # app/services/queue_service.py
-from azure.storage.queue.aio import QueueServiceClient, QueueClient # CAMBIO AQUÍ
+from azure.storage.queue.aio import QueueServiceClient, QueueClient
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 import json
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Any
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import get_settings
 from app.core.logging import logger
 
-
 class QueueServiceError(Exception):
-    """Excepción base para errores del QueueService."""
+    """Excepción personalizada para errores en QueueService."""
     pass
 
-class QueueNotFoundError(QueueServiceError):
-    """Excepción cuando no existe la cola."""
-    pass
-
-def datetime_handler(obj):
-    """Maneja la serialización de objetos datetime a JSON."""
+def datetime_handler(obj: Any) -> str:
+    """Maneja la serialización de objetos datetime a formato ISO para JSON."""
     if isinstance(obj, datetime):
         return obj.isoformat()
     raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
 
 class QueueService:
     """
-    Servicio para enviar eventos ManyChat a la cola de Azure Storage Queue.
-    Implementa manejo de errores, retries y Dead Letter Queue.
+    Servicio completo y robusto para interactuar de forma asíncrona con Azure Storage Queue.
+    Implementa reintentos, DLQ, y no duplica código.
     """
     def __init__(self):
         settings = get_settings()
-        # CAMBIO: Inicializar el cliente de servicio asíncrono
-        self.client: QueueServiceClient = QueueServiceClient.from_connection_string( # CAMBIO AQUÍ
+        self.client: QueueServiceClient = QueueServiceClient.from_connection_string(
             settings.AZURE_STORAGE_CONNECTION_STRING
         )
-        self.main_queue_name = "manychat-events-queue"
         self.campaign_queue_name = "manychat-campaign-queue"
-        self.dlq_name = "manychat-events-dlq"
         self.contact_queue_name = "manychat-contact-queue"
-        # Llamar a ensure_queues_exist de forma asíncrona (esto se arreglará al llamar a esta clase)
-        # self._ensure_queues_exist() # COMENTA o BORRA esta línea, la manejaremos en el worker
+        self.dlq_name = "manychat-events-dlq"
 
-    # CAMBIO: Hacer este método asíncrono
-    async def _ensure_queues_exist(self) -> None: # CAMBIO AQUÍ
-        """
-        Verifica y crea las colas necesarias si no existen.
-        Raises:
-            QueueServiceError: Si hay un error al crear las colas.
-        """
-        logger.info("Iniciando verificación/creación de colas de Azure Storage...")
-
-        queues_to_ensure = [
-            self.main_queue_name,
-            self.campaign_queue_name,
-            self.contact_queue_name,
-            self.dlq_name
-        ]
-
+    async def ensure_queues_exist(self) -> None:
+        """Verifica y crea las colas necesarias de forma asíncrona si no existen."""
+        logger.info("Verificando/creando colas de Azure...")
+        queues_to_ensure = [self.campaign_queue_name, self.contact_queue_name, self.dlq_name]
         for queue_name in queues_to_ensure:
             try:
-                logger.info(f"Intentando crear/verificar cola: {queue_name}")
-                # CAMBIO: usar await para create_queue
-                await self.client.create_queue(queue_name) # CAMBIO AQUÍ
-                logger.info(f"Cola {queue_name} creada o verificada exitosamente.")
+                await self.client.create_queue(queue_name)
+                logger.info(f"Cola '{queue_name}' lista.")
             except ResourceExistsError:
-                logger.info(f"Cola {queue_name} ya existe. Continuando.")
+                logger.info(f"Cola '{queue_name}' ya existe.")
             except Exception as e:
-                logger.error(f"Error CRÍTICO al crear/verificar la cola {queue_name}: {str(e)}", exc_info=True)
-                raise QueueServiceError(f"Error al inicializar la cola {queue_name}: {str(e)}")
-
-        logger.info("Verificación/creación de todas las colas finalizada.")
+                logger.error(f"Error CRÍTICO al inicializar la cola {queue_name}: {e}", exc_info=True)
+                raise QueueServiceError(f"No se pudo inicializar la cola {queue_name}: {e}")
 
     def _get_queue_client(self, queue_name: str) -> QueueClient:
-        """
-        Obtiene un cliente para una cola específica (ahora asíncrono).
-        Args:
-            queue_name: Nombre de la cola
-        Returns:
-            QueueClient para la cola especificada
-        Raises:
-            QueueNotFoundError: Si la cola no existe
-        """
-        try:
-            # CAMBIO: get_queue_client del cliente de servicio asíncrono devuelve un QueueClient asíncrono
-            return self.client.get_queue_client(queue_name) # ESTO YA DEVUELVE EL CLIENTE ASÍNCRONO
-        except ResourceNotFoundError:
-            logger.error(f"Cola {queue_name} no encontrada")
-            raise QueueNotFoundError(f"La cola {queue_name} no existe")
-        except Exception as e:
-            logger.error(f"Error al obtener cola {queue_name}", error=str(e))
-            raise QueueServiceError(f"Error al obtener cola {queue_name}: {str(e)}")
+        """Obtiene un cliente asíncrono para una cola específica."""
+        return self.client.get_queue_client(queue_name)
 
     @retry(
         stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(QueueServiceError),
-        before_sleep=lambda retry_state: logger.warning(
-            "Reintentando envío a cola",
-            attempt=retry_state.attempt_number,
-            wait=retry_state.idle_for
-        )
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type(QueueServiceError)
     )
-    async def send_campaign_event_to_queue(self, event_data: dict) -> None:
+    async def send_message(self, queue_name: str, event_data: dict, is_dlq_retry: bool = False) -> None:
         """
-        Envía un evento de asignación de campaña a la cola de campañas.
-        ...
+        Envía un mensaje a una cola. Si falla, intenta enviarlo a la DLQ.
         """
         manychat_id = event_data.get('manychat_id', 'unknown')
-
-        try:
-            message = json.dumps(event_data, default=datetime_handler)
-            queue_client = self._get_queue_client(self.campaign_queue_name)
-            await queue_client.send_message(message) # Mantener await
-            logger.info("Evento de campaña encolado exitosamente",
-                        queue=self.campaign_queue_name,
-                        manychat_id=manychat_id,
-                        campaign_id=event_data.get('campaign_id', 'unknown'))
-
-        except Exception as e:
-            logger.error("Error inesperado al encolar evento de campaña",
-                         error=str(e),
-                         manychat_id=manychat_id)
-            raise QueueServiceError(f"Error inesperado al encolar evento de campaña: {str(e)}")
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(QueueServiceError),
-        before_sleep=lambda retry_state: logger.warning(
-            "Reintentando envío a cola",
-            attempt=retry_state.attempt_number,
-            wait=retry_state.idle_for
-        )
-    )
-    async def send_message(self, event_data: dict, queue_name: str) -> None:
-        """
-        Envía un mensaje a la cola especificada.
-        ...
-        """
-        manychat_id = event_data.get('manychat_id', 'unknown')
-
         try:
             message_content = json.dumps(event_data, default=datetime_handler)
             queue_client = self._get_queue_client(queue_name)
-            await queue_client.send_message(message_content) # Mantener await
+            await queue_client.send_message(message_content)
+            logger.info("Mensaje encolado exitosamente.", queue=queue_name, manychat_id=manychat_id)
 
-            logger.info("Mensaje encolado exitosamente",
-                        queue=queue_name,
-                        manychat_id=manychat_id)
-
-        except QueueServiceError as e:
-            logger.error(f"Error al enviar a cola principal ({queue_name}): {str(e)}. Intentando DLQ.", exc_info=True)
-            try:
-                dlq_client = self._get_queue_client(self.dlq_name)
+        except Exception as e:
+            logger.error(f"Fallo al enviar a la cola '{queue_name}'", error=str(e), manychat_id=manychat_id, exc_info=True)
+            
+            # LÓGICA DE DLQ RECUPERADA: No intentar enviar a DLQ si ya es un reintento de DLQ.
+            if not is_dlq_retry:
+                logger.warning(f"Intentando enviar mensaje a la Dead Letter Queue (DLQ)...", manychat_id=manychat_id)
                 dlq_message = {
                     "original_queue": queue_name,
                     "error_time": datetime.now(timezone.utc).isoformat(),
-                    "event_data": event_data,
-                    "error_message": str(e)
+                    "error_message": str(e),
+                    "original_event": event_data
                 }
-                await dlq_client.send_message(json.dumps(dlq_message, default=datetime_handler)) # Mantener await
-                logger.warning("Evento enviado a DLQ",
-                               original_queue=queue_name,
-                               manychat_id=manychat_id)
-            except Exception as dlq_error:
-                logger.error("Error al enviar a DLQ",
-                             error=str(dlq_error),
-                             manychat_id=manychat_id,
-                             exc_info=True)
-                raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
+                # Llamada recursiva para enviar a la DLQ, marcando que es un reintento.
+                await self.send_message(self.dlq_name, dlq_message, is_dlq_retry=True)
+            else:
+                # Si incluso el envío a la DLQ falla, se lanza la excepción final.
+                logger.critical("FALLO CRÍTICO: No se pudo enviar el mensaje ni a la cola principal ni a la DLQ.", manychat_id=manychat_id)
+                raise QueueServiceError(f"Fallo al enviar a '{queue_name}' y también a la DLQ.")
 
-        except Exception as e:
-            logger.error("Error inesperado al encolar evento",
-                            error=str(e),
-                            manychat_id=manychat_id,
-                            queue=queue_name,
-                            exc_info=True)
-            raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
-
-    async def peek_messages(self, queue_name: Optional[str] = None, max_messages: int = 32) -> list:
-        """
-        Inspecciona mensajes en una cola sin eliminarlos.
-        ...
-        """
-        queue_name = queue_name or self.main_queue_name
+    async def receive_message(self, queue_name: str, visibility_timeout: int = 300) -> Optional[Any]:
+        """Recibe un único mensaje de la cola de forma asíncrona."""
         try:
             queue_client = self._get_queue_client(queue_name)
-            messages = await queue_client.peek_messages(max_messages=max_messages) # Mantener await
-            return [json.loads(msg.content) for msg in messages]
+            async for message in queue_client.receive_messages(max_messages=1, visibility_timeout=visibility_timeout):
+                return message
+            return None
         except Exception as e:
-            logger.error(f"Error al inspeccionar cola {queue_name}", error=str(e))
-            raise QueueServiceError(f"Error al inspeccionar cola: {str(e)}")
+            logger.error(f"Error al recibir mensaje de '{queue_name}'", error=str(e), exc_info=True)
+            raise QueueServiceError(f"Error al recibir mensaje: {e}")
 
-    async def receive_message(self, queue_name: str):
-        """
-        Recibe un mensaje de la cola especificada.
-        Retorna el mensaje si lo hay, o None.
-        """
-        try:
-            queue_client: QueueClient = self._get_queue_client(queue_name)
-            # await queue_client.receive_messages devuelve un AsyncItemPaged, que SÍ es awaitable.
-            # Necesitamos iterar sobre él de forma asíncrona.
-            async for message in queue_client.receive_messages(max_messages=1, visibility_timeout=300): # CAMBIO CLAVE AQUÍ
-                return message # Retorna el primer mensaje que reciba
-            return None # No hay mensajes
-        except Exception as e:
-            logger.error(f"Error recibiendo mensaje de {queue_name}", error=str(e), exc_info=True)
-            raise QueueServiceError(f"Error al recibir mensaje: {str(e)}")
-
-    async def delete_message(self, queue_name: str, message_id: str, pop_receipt: str):
-        """
-        Elimina un mensaje procesado de la cola.
-        ...
-        """
+    async def delete_message(self, queue_name: str, message_id: str, pop_receipt: str) -> None:
+        """Elimina un mensaje de la cola de forma asíncrona."""
         try:
             queue_client = self._get_queue_client(queue_name)
-            await queue_client.delete_message(message_id, pop_receipt) # Mantener await
-            logger.info(f"Mensaje '{message_id}' eliminado exitosamente de la cola '{queue_name}'.")
+            await queue_client.delete_message(message_id, pop_receipt)
+            logger.info(f"Mensaje '{message_id}' eliminado de '{queue_name}'.")
         except Exception as e:
-            logger.error(f"Error eliminando mensaje '{message_id}' de la cola '{queue_name}'", error=str(e), exc_info=True)
-            raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}")
-from azure.storage.queue import QueueServiceClient, QueueClient
-from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
-import json
-from datetime import datetime
-from typing import Optional
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from app.core.config import get_settings
-from app.core.logging import logger
-
-
-class QueueServiceError(Exception):
-    """Excepción base para errores del QueueService."""
-    pass
-
-class QueueNotFoundError(QueueServiceError):
-    """Excepción cuando no existe la cola."""
-    pass
-
-def datetime_handler(obj):
-    """Maneja la serialización de objetos datetime a JSON."""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
-
-class QueueService:
-    """
-    Servicio para enviar y recibir eventos de la cola de Azure Storage Queue.
-    Implementa manejo de errores, retries y Dead Letter Queue.
-    """
-    def __init__(self, skip_queue_init: bool = False):
-        settings = get_settings()
-        self.client = QueueServiceClient.from_connection_string(
-            settings.AZURE_STORAGE_CONNECTION_STRING
-        )
-        self.main_queue_name = "manychat-events-queue"
-        self.campaign_queue_name = "manychat-campaign-queue"
-        self.dlq_name = "manychat-events-dlq"
-        self.contact_queue_name = "manychat-contact-queue"
-        if not skip_queue_init:
-            self._ensure_queues_exist()
-
-    def _ensure_queues_exist(self) -> None:
-        """
-        Verifica y crea las colas necesarias si no existen.
-        Raises:
-            QueueServiceError: Si hay un error al crear las colas.
-        """
-        logger.info("Iniciando verificación/creación de colas de Azure Storage...")
-
-        queues_to_ensure = [
-            self.main_queue_name,
-            self.campaign_queue_name,
-            self.contact_queue_name,
-            self.dlq_name
-        ]
-
-        for queue_name in queues_to_ensure:
-            try:
-                logger.info(f"Intentando crear/verificar cola: {queue_name}")
-                self.client.create_queue(queue_name)
-                logger.info(f"Cola {queue_name} creada o verificada exitosamente.")
-            except ResourceExistsError:
-                logger.info(f"Cola {queue_name} ya existe. Continuando.")
-            except Exception as e:
-                logger.error(f"Error CRÍTICO al crear/verificar la cola {queue_name}: {str(e)}", exc_info=True)
-                raise QueueServiceError(f"Error al inicializar la cola {queue_name}: {str(e)}")
-        
-        logger.info("Verificación/creación de todas las colas finalizada.")
-
-    def _get_queue_client(self, queue_name: str) -> QueueClient:
-        """
-        Obtiene un cliente para una cola específica.
-        Args:
-            queue_name: Nombre de la cola
-        Returns:
-            QueueClient para la cola especificada
-        Raises:
-            QueueNotFoundError: Si la cola no existe
-        """
-        try:
-            return self.client.get_queue_client(queue_name)
-        except ResourceNotFoundError:
-            logger.error(f"Cola {queue_name} no encontrada")
-            raise QueueNotFoundError(f"La cola {queue_name} no existe")
-        except Exception as e:
-            logger.error(f"Error al obtener cola {queue_name}", error=str(e))
-            raise QueueServiceError(f"Error al obtener cola {queue_name}: {str(e)}")
-
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=4, max=10),
-        retry=retry_if_exception_type(QueueServiceError),
-        before_sleep=lambda retry_state: logger.warning(
-            "Reintentando envío a cola",
-            attempt=retry_state.attempt_number,
-            wait=retry_state.idle_for
-        )
-    )
-    async def send_campaign_event_to_queue(self, event_data: dict) -> None:
-        """
-        Envía un evento de asignación de campaña a la cola de campañas.
-
-        Args:
-            event_data: Diccionario con los datos del evento de campaña
-
-        Raises:
-            QueueServiceError: Si hay un error al enviar el mensaje a la cola de campañas
-        """
-        manychat_id = event_data.get('manychat_id', 'unknown')
-
-        try:
-            # Serializar el mensaje con manejo de fechas
-            message = json.dumps(event_data, default=datetime_handler)
-
-            # Obtener cliente de la cola de campañas
-            queue_client = self._get_queue_client(self.campaign_queue_name)
-
-            # Enviar mensaje
-            queue_client.send_message(message)
-
-            logger.info("Evento de campaña encolado exitosamente",
-                        queue=self.campaign_queue_name,
-                        manychat_id=manychat_id,
-                        campaign_id=event_data.get('campaign_id', 'unknown'))
-
-        except Exception as e:
-            logger.error("Error inesperado al encolar evento de campaña",
-                         error=str(e),
-                         manychat_id=manychat_id)
-            raise QueueServiceError(f"Error inesperado al encolar evento de campaña: {str(e)}")
-
-    async def send_event_to_queue(self, event_data: dict, queue_name: str = None) -> None:
-        """
-        Envía un evento ManyChat a la cola especificada para procesamiento asíncrono.
-        Implementa retry logic y manejo de errores.
-
-        Args:
-            event_data: Diccionario con los datos del evento ManyChat
-            queue_name: Nombre de la cola destino (por defecto usa main_queue_name)
-
-        Raises:
-            QueueServiceError: Si hay un error al enviar el mensaje después de los reintentos
-        """
-        # Usar cola principal si no se especifica otra
-        target_queue = queue_name or self.main_queue_name
-        manychat_id = event_data.get('manychat_id', 'unknown')
-
-        try:
-            # Serializar el mensaje con manejo de fechas
-            message = json.dumps(event_data, default=datetime_handler)
-
-            # Obtener cliente de la cola destino
-            queue_client = self._get_queue_client(target_queue)
-
-            # Enviar mensaje
-            queue_client.send_message(message)
-
-            logger.info("Evento encolado exitosamente",
-                        queue=target_queue,
-                        manychat_id=manychat_id)
-
-        except QueueServiceError: # Este catch es para errores específicos de QueueService
-            # Si es un error de la cola, intentar enviar a DLQ
-            try:
-                dlq_client = self._get_queue_client(self.dlq_name)
-                dlq_message = {
-                    "original_queue": target_queue,
-                    "error_time": datetime.utcnow().isoformat(),
-                    "event_data": event_data
-                }
-                dlq_client.send_message(json.dumps(dlq_message, default=datetime_handler))
-                logger.warning("Evento enviado a DLQ",
-                                original_queue=target_queue,
-                                manychat_id=manychat_id)
-            except Exception as dlq_error:
-                logger.error("Error al enviar a DLQ",
-                                error=str(dlq_error),
-                                manychat_id=manychat_id)
-                raise QueueServiceError("Error al enviar tanto a cola principal como a DLQ")
-
-        except Exception as e: # Este catch es para cualquier otro error inesperado
-            logger.error("Error inesperado al encolar evento",
-                            error=str(e),
-                            manychat_id=manychat_id,
-                            queue=target_queue)
-            raise QueueServiceError(f"Error inesperado al encolar evento: {str(e)}")
-
-    async def peek_messages(self, queue_name: Optional[str] = None, max_messages: int = 32) -> list:
-        """
-        Inspecciona mensajes en una cola sin eliminarlos.
-        Útil para monitoreo y debugging.
-
-        Args:
-            queue_name: Nombre de la cola a inspeccionar (default: cola principal)
-            max_messages: Máximo número de mensajes a retornar
-
-        Returns:
-            Lista de mensajes en la cola
-        """
-        queue_name = queue_name or self.main_queue_name
-        try:
-            queue_client = self._get_queue_client(queue_name)
-            messages = queue_client.peek_messages(max_messages=max_messages)
-            return [json.loads(msg.content) for msg in messages]
-        except Exception as e:
-            logger.error(f"Error al inspeccionar cola {queue_name}", error=str(e))
-            raise QueueServiceError(f"Error al inspeccionar cola: {str(e)}")
-
-    async def receive_message(self, queue_name: str):
-        """
-        Recibe un mensaje de la cola especificada.
-        Retorna el mensaje si lo hay, o None.
-        """
-        try:
-            queue_client: QueueClient = self._get_queue_client(queue_name)
-            messages = queue_client.receive_messages(max_messages=1, visibility_timeout=300)
-            for message in messages:
-                return message # Retorna el primer mensaje (el objeto QueueMessage completo)
-            return None # No hay mensajes
-        except Exception as e:
-            logger.error(f"Error recibiendo mensaje de {queue_name}", error=str(e))
-            raise QueueServiceError(f"Error al recibir mensaje: {str(e)}")
-
-    # MÉTODO DELETE_MESSAGE CORREGIDO
-    def delete_message(self, queue_name: str, message_id: str, pop_receipt: str) -> None:
-        """
-        Elimina un mensaje procesado de la cola especificada.
-        Args:
-            queue_name: El nombre de la cola de la que se elimina el mensaje.
-            message_id: El ID del mensaje a eliminar.
-            pop_receipt: El pop_receipt del mensaje a eliminar.
-        """
-        try:
-            queue_client = self._get_queue_client(queue_name)
-            queue_client.delete_message(message_id, pop_receipt)
-            logger.info(f"Mensaje (ID: {message_id}) eliminado exitosamente de la cola '{queue_name}'.")
-        except Exception as e:
-            logger.error(f"Error eliminando mensaje (ID: {message_id}) de la cola '{queue_name}': {e}", exc_info=True)
-            raise QueueServiceError(f"Error al eliminar mensaje: {str(e)}")
+            logger.error(f"Error al eliminar mensaje '{message_id}' de '{queue_name}'", error=str(e), exc_info=True)
+            raise QueueServiceError(f"Error al eliminar mensaje: {e}")

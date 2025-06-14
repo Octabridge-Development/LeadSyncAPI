@@ -1,117 +1,79 @@
-# Este archivo contiene la configuración centralizada del proyecto.
-# Utiliza Pydantic para manejar variables de entorno y Azure Key Vault para secretos sensibles.
-# Proporciona la clase Settings y la función get_settings para acceder a la configuración.
-
+# app/core/config.py
 import os
+from typing import Optional
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 from pydantic import Field, AnyHttpUrl
 from azure.identity import DefaultAzureCredential
 from azure.keyvault.secrets import SecretClient
 
-# Configuración centralizada usando Pydantic v2
+# No se importa el logger aquí para evitar importaciones circulares.
+
 class Settings(BaseSettings):
-    # --- Configuración general ---
-    DEBUG: bool = Field(True, alias="DEBUG")  # Modo debug
-    API_KEY: str = Field(..., alias="API_KEY")  # API Key para proteger endpoints (requerido)
-    API_V1_STR: str = Field("/api/v1", alias="API_V1_STR")  # Prefijo de la API
+    # --- Configuración General ---
+    DEBUG: bool = Field(True, alias="DEBUG")
+    API_KEY: str = Field(..., alias="API_KEY")
+    API_V1_STR: str = Field("/api/v1", alias="API_V1_STR")
+    PORT: int = Field(8000, alias="PORT")
 
     # --- Odoo ---
-    ODOO_URL: AnyHttpUrl = Field(..., alias="ODOO_URL")  # URL completa de Odoo (https://...)
-    ODOO_DB: str = Field(..., alias="ODOO_DB")  # Nombre de la base de datos Odoo
-    ODOO_USERNAME: str = Field(..., alias="ODOO_USERNAME")  # Usuario de Odoo
-    ODOO_PASSWORD: str = Field(..., alias="ODOO_PASSWORD")  # Contraseña de Odoo
-    ODOO_RATE_LIMIT: float = Field(1.0, alias="ODOO_RATE_LIMIT")  # Límite de requests/segundo
+    ODOO_URL: AnyHttpUrl = Field(..., alias="ODOO_URL")
+    ODOO_DB: str = Field(..., alias="ODOO_DB")
+    ODOO_USERNAME: str = Field(..., alias="ODOO_USERNAME")
+    ODOO_PASSWORD: str = Field(..., alias="ODOO_PASSWORD")
+    ODOO_RATE_LIMIT: float = Field(1.0, alias="ODOO_RATE_LIMIT")
 
     # --- Azure ---
-    AZURE_STORAGE_CONNECTION_STRING: str = Field(..., alias="AZURE_STORAGE_CONNECTION_STRING")  # Cadena de conexión de Azure Storage
-    DATABASE_URL: str = Field(..., alias="DATABASE_URL")  # URL de conexión a la base de datos
-    USE_KEY_VAULT: bool = Field(False, alias="USE_KEY_VAULT")  # Usar Azure Key Vault para secretos
-    KEY_VAULT_NAME: str = Field("", alias="KEY_VAULT_NAME")  # Nombre del Key Vault (si aplica)
+    AZURE_STORAGE_CONNECTION_STRING: str = Field(..., alias="AZURE_STORAGE_CONNECTION_STRING")
+    DATABASE_URL: str = Field(..., alias="DATABASE_URL")
+    USE_KEY_VAULT: bool = Field(False, alias="USE_KEY_VAULT")
+    KEY_VAULT_NAME: str = Field("", alias="KEY_VAULT_NAME")
 
-    # --- Extensión futura: Campaign/Advisor ---
-    # Agregar aquí nuevos campos si se agregan endpoints de campaña o asesor
-
-    # Configuración para cargar desde .env
-    model_config = {
-        "env_file": os.getenv("ENV_FILE", ".env"),
-        "env_file_encoding": "utf-8"
-    }
+    # --- Logging ---
+    LOG_LEVEL: str = Field("INFO", alias="LOG_LEVEL")
+    LOG_FORMAT: str = Field("json", alias="LOG_FORMAT")
+    APPINSIGHTS_INSTRUMENTATION_KEY: Optional[str] = Field(None, alias="APPINSIGHTS_INSTRUMENTATION_KEY")
+    
+    class Config:
+        env_file = os.getenv("ENV_FILE", ".env")
+        env_file_encoding = "utf-8"
 
     def load_secrets_from_key_vault(self):
         """Carga secretos desde Azure Key Vault si está habilitado."""
-        if self.USE_KEY_VAULT:
-            credential = DefaultAzureCredential()
-            key_vault_url = f"https://{self.KEY_VAULT_NAME}.vault.azure.net"
-            client = SecretClient(vault_url=key_vault_url, credential=credential)
+        if self.USE_KEY_VAULT and self.KEY_VAULT_NAME:
+            print(f"INFO: Cargando secretos desde Azure Key Vault: {self.KEY_VAULT_NAME}...")
+            try:
+                credential = DefaultAzureCredential()
+                key_vault_url = f"https://{self.KEY_VAULT_NAME}.vault.azure.net"
+                client = SecretClient(vault_url=key_vault_url, credential=credential)
 
-            # Sobrescribir configuraciones con secretos del Key Vault
-            self.API_KEY = client.get_secret("API-KEY").value
-            self.ODOO_PASSWORD = client.get_secret("ODOO-PASSWORD").value
-            self.AZURE_STORAGE_CONNECTION_STRING = client.get_secret("AZURE-STORAGE-CONNECTION-STRING").value
-            self.DATABASE_URL = client.get_secret("DATABASE-URL").value
+                self.API_KEY = client.get_secret("API-KEY").value
+                self.ODOO_PASSWORD = client.get_secret("ODOO-PASSWORD").value
+                self.AZURE_STORAGE_CONNECTION_STRING = client.get_secret("AZURE-STORAGE-CONNECTION-STRING").value
+                self.DATABASE_URL = client.get_secret("DATABASE-URL").value
+                
+                try:
+                    self.APPINSIGHTS_INSTRUMENTATION_KEY = client.get_secret("APPINSIGHTS-INSTRUMENTATION-KEY").value
+                except Exception:
+                    print("WARN: La clave 'APPINSIGHTS-INSTRUMENTATION-KEY' no se encontró en Key Vault.")
+
+                print("INFO: Secretos cargados exitosamente desde Key Vault.")
+            except Exception as e:
+                print(f"ERROR: Fallo al cargar secretos desde Key Vault: {e}")
+                raise IOError("No se pudieron cargar los secretos de Azure Key Vault.")
+        else:
+            print("INFO: Azure Key Vault no está habilitado.")
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Obtiene una instancia cacheada de la configuración."""
+    """
+    Crea y retorna una instancia única de la configuración.
+    """
+    print("INFO: Inicializando configuración de la aplicación...")
     settings = Settings()
-    if settings.USE_KEY_VAULT:
+    # Solo cargar secretos de Key Vault si USE_KEY_VAULT es True
+    if getattr(settings, "USE_KEY_VAULT", False):
         settings.load_secrets_from_key_vault()
-    return settings
-# Este archivo contiene la configuración centralizada del proyecto.
-# Utiliza Pydantic para manejar variables de entorno y Azure Key Vault para secretos sensibles.
-# Proporciona la clase Settings y la función get_settings para acceder a la configuración.
-
-from pydantic_settings import BaseSettings
-from functools import lru_cache
-from pydantic import Field, AnyHttpUrl
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
-
-# Configuración centralizada usando Pydantic v2
-class Settings(BaseSettings):
-    # --- Configuración general ---
-    DEBUG: bool = Field(True, alias="DEBUG")  # Modo debug
-    API_KEY: str = Field(..., alias="API_KEY")  # API Key para proteger endpoints (requerido)
-    API_V1_STR: str = Field("/api/v1", alias="API_V1_STR")  # Prefijo de la API
-
-    # --- Odoo ---
-    ODOO_URL: AnyHttpUrl = Field(..., alias="ODOO_URL")  # URL completa de Odoo (https://...)
-    ODOO_DB: str = Field(..., alias="ODOO_DB")  # Nombre de la base de datos Odoo
-    ODOO_USERNAME: str = Field(..., alias="ODOO_USERNAME")  # Usuario de Odoo
-    ODOO_PASSWORD: str = Field(..., alias="ODOO_PASSWORD")  # Contraseña de Odoo
-    ODOO_RATE_LIMIT: float = Field(1.0, alias="ODOO_RATE_LIMIT")  # Límite de requests/segundo
-
-    # --- Azure ---
-    AZURE_STORAGE_CONNECTION_STRING: str = Field(..., alias="AZURE_STORAGE_CONNECTION_STRING")  # Cadena de conexión de Azure Storage
-    DATABASE_URL: str = Field(..., alias="DATABASE_URL")  # URL de conexión a la base de datos
-    USE_KEY_VAULT: bool = Field(False, alias="USE_KEY_VAULT")  # Usar Azure Key Vault para secretos
-    KEY_VAULT_NAME: str = Field("", alias="KEY_VAULT_NAME")  # Nombre del Key Vault (si aplica)
-
-    # --- Extensión futura: Campaign/Advisor ---
-    # Agregar aquí nuevos campos si se agregan endpoints de campaña o asesor
-
-    # Configuración para cargar desde .env
-    model_config = {
-        "env_file": ".env",
-        "env_file_encoding": "utf-8"
-    }
-
-    def load_secrets_from_key_vault(self):
-        """Carga secretos desde Azure Key Vault si está habilitado."""
-        if self.USE_KEY_VAULT:
-            credential = DefaultAzureCredential()
-            key_vault_url = f"https://{self.KEY_VAULT_NAME}.vault.azure.net"
-            client = SecretClient(vault_url=key_vault_url, credential=credential)
-
-            # Sobrescribir configuraciones con secretos del Key Vault
-            self.API_KEY = client.get_secret("API-KEY").value
-            self.ODOO_PASSWORD = client.get_secret("ODOO-PASSWORD").value
-            self.AZURE_STORAGE_CONNECTION_STRING = client.get_secret("AZURE-STORAGE-CONNECTION-STRING").value
-            self.DATABASE_URL = client.get_secret("DATABASE-URL").value
-
-@lru_cache()
-def get_settings():
-    settings = Settings()
-    settings.load_secrets_from_key_vault()
+        
+    print("INFO: Configuración cargada exitosamente.")
     return settings

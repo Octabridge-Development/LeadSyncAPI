@@ -1,3 +1,4 @@
+.env
 # Entorno virtual
 .venv/
 venv/
@@ -128,3 +129,10 @@ yarn-error.log
 .docker/
 
 .env
+
+app/__pycache__/__init__.cpython-311.pyc
+app/__pycache__/main.cpython-311.pyc
+app/core/__pycache__/__init__.cpython-311.pyc
+app/core/__pycache__/config.cpython-311.pyc
+app/core/__pycache__/logging.cpython-311.pyc
+app/services/__pycache__/__init__.cpython-311.pyc
