@@ -8,6 +8,7 @@ from app.api.v1.endpoints.campaign import router as campaign_router
 from app.api.v1.endpoints.advisor import router as advisor_router
 from app.api.v1.endpoints.campaign_contact import router as campaign_contact_by_manychat_router
 from app.api.v1.endpoints.channel import router as channel_router
+from app.api.v1.endpoints.odoo import router as odoo_router
 
 # Router principal que agrupará a todos los demás
 router = APIRouter()
@@ -20,3 +21,4 @@ router.include_router(campaign_router, prefix="/campaigns", tags=["Campaigns"])
 router.include_router(advisor_router, prefix="/advisors", tags=["Advisors"])
 router.include_router(campaign_contact_by_manychat_router, prefix="/campaign-contacts", tags=["CampaignContact"])
 router.include_router(channel_router, prefix="/channels", tags=["Channels"])
+router.include_router(odoo_router, prefix="/odoo", tags=["Odoo"])
