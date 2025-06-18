@@ -24,6 +24,7 @@ RUN useradd --create-home --shell /bin/bash app
 
 # Configurar directorio de trabajo
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 # Copiar requirements y instalar dependencias Python
 COPY requirements.txt .

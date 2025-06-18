@@ -53,7 +53,7 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 )
                 await asyncio.sleep(1) # Pausa para evitar saturar Odoo
             else:
-                await asyncio.sleep(5) # Espera si no hay mensajes
+                await asyncio.sleep(10) # Espera más si no hay mensajes
 
         except QueueServiceError as e:
             logger.error(f"Error de servicio de colas en worker de contactos: {e}", exc_info=True)

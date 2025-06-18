@@ -44,6 +44,28 @@ services:
     networks:
       - miasalud_network
 
+  # Worker de sincronización Odoo
+  odoo_sync_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workers
+    container_name: miasalud_odoo_sync_worker
+    environment:
+      - DEBUG=true
+      - API_KEY=${API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - ODOO_URL=${ODOO_URL}
+      - ODOO_DB=${ODOO_DB}
+      - ODOO_USERNAME=${ODOO_USERNAME}
+      - ODOO_PASSWORD=${ODOO_PASSWORD}
+    volumes:
+      - ./app:/app/app
+      - ./workers:/app/workers
+    command: python /app/workers/odoo_sync_worker.py
+    networks:
+      - miasalud_network
+
 networks:
   miasalud_network:
     driver: bridge

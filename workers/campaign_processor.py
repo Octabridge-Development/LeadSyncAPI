@@ -67,7 +67,7 @@ async def process_campaign_messages(queue_service: QueueService, azure_sql_servi
                 await asyncio.sleep(1) # Pausa para evitar saturar Odoo
             else:
                 # No hay mensajes, espera un poco más
-                await asyncio.sleep(2)
+                await asyncio.sleep(10)
 
         except QueueServiceError as e:
             logger.error(f"Error de servicio de colas: {e}. Reintentando en 10 segundos.", exc_info=True)

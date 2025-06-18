@@ -13,10 +13,14 @@ class OdooRateLimitError(Exception):
     pass
 
 class OdooService:
-    def __init__(self):
+    def __init__(self, url, db, username, password):
         self._client: Optional[ODOO] = None
         self.last_request_time: float = 0
-        self.rate_limit_delay = get_settings().ODOO_RATE_LIMIT
+        self.rate_limit_delay = 1  # Puedes ajustar esto según tu config/env
+        self.url = url
+        self.db = db
+        self.username = username
+        self.password = password
 
     @property
     def client(self) -> ODOO:
@@ -25,26 +29,24 @@ class OdooService:
         return self._client
 
     def _connect(self):
-        settings = get_settings()
-        # OdooRPC solo acepta 'jsonrpc' o 'jsonrpc+ssl' como protocolo
-        protocol = 'jsonrpc+ssl' if settings.ODOO_URL.scheme == 'https' else 'jsonrpc'
+        protocol = 'jsonrpc+ssl' if self.url.startswith('https') else 'jsonrpc'
+        import urllib.parse
+        parsed = urllib.parse.urlparse(self.url)
+        host = parsed.hostname
+        port = parsed.port or (443 if protocol == 'jsonrpc+ssl' else 8069)
         try:
-            # Asegúrate que el puerto 443 es correcto para HTTPS si no está explícito en la URL.
-            # OdooRPC por defecto usa 8069 para jsonrpc y 443 para jsonrpc+ssl si no se especifica.
-            port = settings.ODOO_URL.port if settings.ODOO_URL.port else (443 if protocol == 'jsonrpc+ssl' else 8069)
-            
             self._client = ODOO(
-                host=settings.ODOO_URL.host,
+                host=host,
                 protocol=protocol,
-                port=port, 
-                version='18.0' # <--- **VERIFICA ESTA VERSIÓN CON LA DE TU ODOO**
+                port=port,
+                version='18.0'  # Ajusta la versión según tu Odoo
             )
             self._client.login(
-                db=settings.ODOO_DB,
-                login=settings.ODOO_USERNAME,
-                password=settings.ODOO_PASSWORD
+                db=self.db,
+                login=self.username,
+                password=self.password
             )
-            logger.info(f"Conexión exitosa con Odoo en {settings.ODOO_URL.host}")
+            logger.info(f"Conexión exitosa con Odoo en {host}")
         except RPCError as e:
             logger.error(f"Error de conexión con Odoo: {str(e)}", exc_info=True)
             raise
@@ -53,7 +55,6 @@ class OdooService:
             raise
 
     def _enforce_rate_limit(self):
-        # Aplica un delay para cumplir con el rate limit configurado
         elapsed = time.perf_counter() - self.last_request_time
         if elapsed < self.rate_limit_delay:
             sleep_time = self.rate_limit_delay - elapsed
@@ -169,5 +170,33 @@ class OdooService:
             logger.error(f"Error inesperado al crear/actualizar contacto en Odoo: {str(e)}", exc_info=True)
             raise OdooRateLimitError(f"Error inesperado al sincronizar con Odoo: {str(e)}") from e
 
+    def create_or_update_contact(self, contact):
+        """
+        Sincroniza un contacto con Odoo. Crea o actualiza según el manychat_id.
+        """
+        partner_model = self.client.env['res.partner']
+        # Buscar contacto existente por el campo personalizado de ManyChat
+        existing = partner_model.search([('x_studio_manychatid_customer', '=', contact.manychat_id)])
+        vals = {
+            'name': f"{contact.first_name or ''} {contact.last_name or ''}".strip(),
+            'email': contact.email,
+            'phone': contact.phone,
+            'x_studio_manychatid_customer': contact.manychat_id,
+            # Agrega aquí otros campos relevantes si es necesario
+        }
+        if existing:
+            partner_model.write(existing, vals)
+            return existing[0]
+        else:
+            new_id = partner_model.create(vals)
+            return new_id
+
 # Instancia singleton para reutilizar la conexión
-odoo_service = OdooService()
+from app.core.config import get_settings
+settings = get_settings()
+odoo_service = OdooService(
+    url=str(settings.ODOO_URL),
+    db=settings.ODOO_DB,
+    username=settings.ODOO_USERNAME,
+    password=settings.ODOO_PASSWORD
+)

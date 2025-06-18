@@ -8,9 +8,10 @@ router = APIRouter()
 
 @router.get("/contacts/", response_model=List[Any])
 def get_all_contacts():
-    """Obtiene 20 contactos de Odoo (res.partner)."""
+    """Obtiene los últimos 10 contactos añadidos a Odoo (res.partner), ordenados por create_date descendente."""
     try:
-        ids = odoo_service.execute("res.partner", "search", [], 0, 20)  # offset=0, limit=20
+        # Buscar los 10 contactos más recientes
+        ids = odoo_service.execute("res.partner", "search", [], 0, 10, "create_date desc")
         contacts = odoo_service.execute("res.partner", "read", ids)
         return contacts
     except Exception as e:
@@ -74,11 +75,28 @@ def update_contact(contact_id: int, updates: dict = Body(..., description="Campo
 
 @router.get("/contacts/short/", response_model=List[dict])
 def get_short_contacts():
-    """Obtiene 20 contactos de Odoo con solo los campos clave para sincronización."""
+    """Obtiene 20 contactos de Odoo con solo los campos clave para sincronización, incluyendo manychat_id."""
     try:
         ids = odoo_service.execute("res.partner", "search", [], 0, 20)
-        fields = ["id", "name", "email", "phone", "create_date", "write_date", "active"]
+        fields = [
+            "id", "name", "email", "phone", "create_date", "write_date", "active", "x_studio_manychatid_customer"
+        ]
         contacts = odoo_service.execute("res.partner", "read", ids, fields)
         return contacts
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/contacts/by_manychat_id/{manychat_id}", response_model=Any)
+def get_contact_by_manychat_id(manychat_id: str):
+    """Obtiene un contacto de Odoo (res.partner) por su manychat_id (campo x_studio_manychatid_customer)."""
+    try:
+        partner_ids = odoo_service.execute("res.partner", "search", [("x_studio_manychatid_customer", "=", manychat_id)])
+        if not partner_ids:
+            raise HTTPException(status_code=404, detail="Contacto no encontrado para ese manychat_id")
+        contact = odoo_service.execute("res.partner", "read", [partner_ids[0]])
+        if contact:
+            return contact[0]
+        else:
+            raise HTTPException(status_code=404, detail="Contacto no encontrado")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

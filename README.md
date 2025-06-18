@@ -10,6 +10,7 @@
 7. [Despliegue](#despliegue)
 8. [Requirements](#requirements)
 9. [Desarrollo con Docker](#desarrollo-con-docker)
+10. [Avances y Estado Actual](#avances-y-estado-actual)
 
 ## Visión General
 
@@ -267,6 +268,39 @@ miasalud-integration/
   pytest
   ```
 - Los tests usan variables de entorno desde `.env` o CI/CD.
+
+---
+
+## Avances y Estado Actual (Junio 2025)
+
+### ✔️ Integración completa ManyChat → Azure SQL → Odoo
+- Contactos y asignaciones de campaña de ManyChat se reciben vía webhooks y se encolan en Azure Storage Queue.
+- Workers robustos procesan colas y sincronizan datos en Azure SQL y Odoo.
+- El campo `odoo_sync_status` controla el estado de sincronización (`pending`, `success`, `error`).
+- Los workers ahora reintentan automáticamente los contactos con estado `error`.
+- Ejemplo de payload y curl para el webhook de ManyChat documentado.
+
+### ✔️ Endpoints y servicios Odoo
+- Endpoints GET/POST/PUT/DELETE para `/api/v1/odoo/contacts/` funcionales y documentados.
+- Solucionado el error de instancia en el servicio Odoo (`'str' object has no attribute '_enforce_rate_limit'`).
+- El servicio Odoo usa una instancia singleton correctamente configurada desde variables de entorno.
+- El método `create_or_update_contact` sincroniza contactos con Odoo usando campos personalizados (`x_manychat_id`).
+
+### ✔️ Infraestructura y Docker
+- Dockerfiles y docker-compose revisados y funcionales para desarrollo y producción.
+- Añadido `ENV PYTHONPATH=/app` en Dockerfile de workers para evitar errores de importación.
+- El worker de sincronización Odoo (`odoo_sync_worker.py`) está integrado y documentado.
+- Los workers pueden configurarse para ejecutar con intervalos de sincronización (ej. cada 10 segundos).
+
+### ✔️ Pruebas y monitoreo
+- Pruebas automatizadas para endpoints y workers.
+- Health checks y logs estructurados para visibilidad y troubleshooting.
+- Documentación de pruebas y ejemplos de uso actualizados.
+
+### ✔️ Mejoras pendientes y recomendaciones
+- Mejorar la gestión de errores y visibilidad de logs para la sincronización Odoo y los endpoints.
+- (Opcional) Limitar reintentos de sincronización para evitar loops infinitos en errores persistentes.
+- Validar y documentar el flujo extremo a extremo con ejemplos reales.
 
 ---
 
