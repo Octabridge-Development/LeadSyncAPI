@@ -1,42 +1,4 @@
 services:
-  # Base de datos SQL Server para desarrollo
-  database:
-    image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: miasalud_database
-    environment:
-      ACCEPT_EULA: "Y"
-      SA_PASSWORD: "${SA_PASSWORD}" # CORREGIDO
-      MSSQL_PID: "Developer"
-    ports:
-      - "1433:1433"
-    volumes:
-      - sqlserver_data:/var/opt/mssql
-    healthcheck:
-      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "${SA_PASSWORD}" -Q "SELECT 1" || exit 1 # CORREGIDO
-      interval: 10s
-      timeout: 3s
-      retries: 10
-      start_period: 60s
-    networks:
-      - miasalud_network
-
-  # Redis para colas
-  redis:
-    image: redis:7-alpine
-    container_name: miasalud_redis
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 3s
-      retries: 5
-    networks:
-      - miasalud_network
-
   # API FastAPI
   api:
     build:
@@ -45,23 +7,18 @@ services:
     container_name: miasalud_api
     environment:
       - DEBUG=true
-      - API_KEY=${API_KEY} # CORREGIDO
-      - DATABASE_URL=mssql+pyodbc://sa:${SA_PASSWORD}@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes # CORREGIDO
-      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # CORREGIDO
-      - ODOO_URL=https://ironsolutionbd.odoo.com
-      - ODOO_DB=ironsolutionbd
-      - ODOO_USERNAME=sistemas@miasaludnatural.com
-      - ODOO_PASSWORD=${ODOO_PASSWORD} # CORREGIDO
+      - API_KEY=${API_KEY}
+      - DATABASE_URL=${DATABASE_URL} # Debe apuntar a Azure SQL real
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # Azure Storage real
+      - ODOO_URL=${ODOO_URL}
+      - ODOO_DB=${ODOO_DB}
+      - ODOO_USERNAME=${ODOO_USERNAME}
+      - ODOO_PASSWORD=${ODOO_PASSWORD}
     volumes:
       - ./app:/app/app
       - ./workers:/app/workers
     ports:
       - "8000:8000"
-    depends_on:
-      database:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     networks:
       - miasalud_network
@@ -74,36 +31,18 @@ services:
     container_name: miasalud_workers
     environment:
       - DEBUG=true
-      - DATABASE_URL=mssql+pyodbc://sa:${SA_PASSWORD}@database:1433/master?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes # CORREGIDO
-      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # CORREGIDO
+      - API_KEY=${API_KEY}
+      - DATABASE_URL=${DATABASE_URL} # Azure SQL real
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # Azure Storage real
+      - ODOO_URL=${ODOO_URL}
+      - ODOO_DB=${ODOO_DB}
+      - ODOO_USERNAME=${ODOO_USERNAME}
+      - ODOO_PASSWORD=${ODOO_PASSWORD}
     volumes:
       - ./app:/app/app
       - ./workers:/app/workers
-    depends_on:
-      - api
-      - database
-      - redis
     networks:
       - miasalud_network
-
-  # Azurite para emular Azure Storage
-  azurite:
-    image: mcr.microsoft.com/azure-storage/azurite
-    container_name: miasalud_azurite
-    ports:
-      - "10000:10000"
-      - "10001:10001"
-      - "10002:10002"
-    volumes:
-      - azurite_data:/data
-    command: azurite --loose --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --location /data
-    networks:
-      - miasalud_network
-
-volumes:
-  sqlserver_data:
-  redis_data:
-  azurite_data:
 
 networks:
   miasalud_network:
