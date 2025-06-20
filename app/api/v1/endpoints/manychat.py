@@ -366,7 +366,7 @@ def update_campaign_contact_endpoint(
         # Detect which fields were set in the request
         fields_set = getattr(campaign_contact_data, 'model_fields_set', set())
         update_kwargs = {}
-        for field in ["campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state"]:
+        for field in ["campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state", "summary"]:
             if field in fields_set and hasattr(campaign_contact_data, field):
                 value = getattr(campaign_contact_data, field, None)
                 if value is not None:
@@ -389,7 +389,8 @@ def update_campaign_contact_endpoint(
             manychat_id=campaign_contact_data.manychat_id, 
             medical_advisor_id=updated_campaign_contact_obj.medical_advisor_id,
             medical_assignment_date=updated_campaign_contact_obj.medical_assignment_date,
-            last_state=updated_campaign_contact_obj.last_state
+            last_state=updated_campaign_contact_obj.last_state,
+            summary=updated_campaign_contact_obj.summary
         )
 
     except ValueError as ve:

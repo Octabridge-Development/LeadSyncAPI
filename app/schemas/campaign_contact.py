@@ -19,6 +19,7 @@ class CampaignContactUpdate(BaseModel):
     medical_advisor_id: Optional[int] = Field(None, description="ID del Médico/Asesor de la tabla Advisor")
     medical_assignment_date: Optional[datetime] = Field(None, description="Fecha y hora de asignación del médico. Si no se proporciona y la columna está vacía, se usará la fecha y hora UTC actuales.")
     last_state: Optional[str] = Field(None, max_length=100, description="Último estado de la campaña-contacto")
+    summary: Optional[str] = Field(None, description="Resumen de Conversación")
 
     model_config = ConfigDict(from_attributes=True)
     json_schema_extra: ClassVar[dict] = {
@@ -27,7 +28,8 @@ class CampaignContactUpdate(BaseModel):
             "campaign_id": 10, # Ejemplo de un Campaign ID (opcional)
             "medical_advisor_id": 123,      # Ejemplo de un ID de asesor médico
             "medical_assignment_date": "2025-06-06T10:30:00Z", # Ejemplo de fecha y hora
-            "last_state": "Asignado a Médico" # Ejemplo de estado
+            "last_state": "Asignado a Médico", # Ejemplo de estado
+            "summary": "Cliente interesado en producto X. Conversación positiva."
         }
     }
 
@@ -49,6 +51,7 @@ class CampaignContactRead(BaseModel):
     conversation_closed_date: Optional[datetime] = None
     last_state: Optional[str] = None
     lead_state: Optional[str] = None
+    summary: Optional[str] = None
 
     class Config:
         orm_mode = True

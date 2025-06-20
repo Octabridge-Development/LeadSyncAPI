@@ -109,6 +109,9 @@ class AzureSQLService:
                     "last_state": event.ultimo_estado,
                     "lead_state": event.tipo_asignacion # Asumiendo que 'tipo_asignacion' se mapea a 'lead_state'
                 }
+                # Incluir summary si viene en el evento
+                if hasattr(event, "summary") and event.summary is not None:
+                    campaign_contact_data["summary"] = event.summary
                 campaign_contact = campaign_contact_repo.create_or_update_assignment(campaign_contact_data)
 
                 self.logger.info(f"Evento de campaña procesado exitosamente para contacto {contact.manychat_id}, campaña {campaign.name}. CampaignContact ID: {campaign_contact.id}")

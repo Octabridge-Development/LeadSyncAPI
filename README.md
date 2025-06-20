@@ -174,7 +174,8 @@ miasalud-integration/
   "medico_id": "101",
   "datetime_actual": "2025-06-10T10:10:00Z",
   "ultimo_estado": "Asignado a campaña",
-  "tipo_asignacion": "medico"
+  "tipo_asignacion": "medico",
+  "summary": "El cliente preguntó por el producto X y mostró interés en agendar una cita."
 }
 ```
 
@@ -186,7 +187,8 @@ miasalud-integration/
   "campaign_id": 85,
   "medical_advisor_id": 101,
   "medical_assignment_date": "2025-06-10T11:00:00Z",
-  "last_state": "Asignado a médico"
+  "last_state": "Asignado a médico",
+  "summary": "Conversación finalizada, cliente agendó consulta."
 }
 ```
 

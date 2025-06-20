@@ -32,3 +32,4 @@ class ManyChatCampaignAssignmentEvent(BaseModel):
     datetime_actual: datetime
     ultimo_estado: str
     tipo_asignacion: str = "comercial"
+    summary: Optional[str] = None  # Resumen de la conversación/chat
