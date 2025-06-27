@@ -1,4 +1,24 @@
 # workers/contact_processor.py
+"""
+Worker de Contactos para ManyChat → Azure SQL/Odoo
+--------------------------------------------------
+Procesa eventos de contacto desde la cola 'manychat-contact-queue'.
+
+- Lee mensajes de la cola de Azure Storage.
+- Procesa eventos de contacto de ManyChat.
+- Guarda/actualiza el contacto en Azure SQL y sincroniza con Odoo.
+- Elimina el mensaje de la cola tras procesar.
+
+Este worker implementa el patrón recomendado de desacoplamiento por colas, permitiendo:
+- Controlar la concurrencia hacia Odoo (evitar superar 1 req/s).
+- Reintentos automáticos y tolerancia a fallos.
+- Escalabilidad y resiliencia ante picos de tráfico.
+
+Recomendaciones:
+- Ejecutar solo una instancia de este worker para evitar saturar Odoo.
+- Monitorear métricas y errores para detectar cuellos de botella.
+- Mantener la lógica idempotente para evitar duplicados en reintentos.
+"""
 import asyncio
 import json
 from app.services.queue_service import QueueService, QueueServiceError
@@ -31,10 +51,9 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                     message_id=message.id, 
                     pop_receipt=message.pop_receipt
                 )
-                
-                await asyncio.sleep(0.5) # Pausa breve tras procesar
+                await asyncio.sleep(1) # Pausa para evitar saturar Odoo
             else:
-                await asyncio.sleep(5) # Espera si no hay mensajes
+                await asyncio.sleep(10) # Espera más si no hay mensajes
 
         except QueueServiceError as e:
             logger.error(f"Error de servicio de colas en worker de contactos: {e}", exc_info=True)

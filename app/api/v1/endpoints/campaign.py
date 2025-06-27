@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -6,6 +6,7 @@ from app.db.session import SessionLocal
 from app.db import models
 from app.api import deps
 from app.schemas.campaign import CampaignCreate, CampaignUpdate, CampaignInDB
+from app.core.config import get_settings
 
 router = APIRouter()
 
@@ -60,14 +61,13 @@ def update_campaign(campaign_id: int, campaign_update: CampaignUpdate, db: Sessi
 # NOTA: En tu solicitud original NO pediste DELETE para Campaign,
 # pero lo incluí aquí por consistencia con un CRUD completo. Puedes comentarlo si no lo necesitas.
 @router.delete("/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar campaña por ID (opcional)")
-def delete_campaign(campaign_id: int, db: Session = Depends(deps.get_db)):
-    """
-    Elimina una campaña específica usando su ID.
-    """
+def delete_campaign(campaign_id: int, api_key: str = Query(..., description="Debes ingresar el API_KEY para confirmar la eliminación"), db: Session = Depends(deps.get_db)):
+    settings = get_settings()
+    if api_key != settings.API_KEY:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API_KEY inválido. No autorizado para eliminar.")
     db_campaign = db.query(models.Campaign).filter(models.Campaign.id == campaign_id).first()
     if db_campaign is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Campaña no encontrada")
-    
     db.delete(db_campaign)
     db.commit()
     return {"message": "Campaña eliminada exitosamente"}

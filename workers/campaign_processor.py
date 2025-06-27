@@ -1,4 +1,25 @@
 # workers/campaign_processor.py
+"""
+Worker de Campañas para ManyChat → Azure SQL/Odoo
+--------------------------------------------------
+Procesa eventos de asignación de campaña desde la cola 'manychat-campaign-queue'.
+
+- Lee mensajes de la cola de Azure Storage.
+- Procesa eventos de asignación de campaña de ManyChat.
+- Actualiza la relación de campaña en Azure SQL.
+- Elimina el mensaje de la cola tras procesar.
+
+Este worker implementa el patrón recomendado de desacoplamiento por colas, permitiendo:
+- Controlar la concurrencia hacia Odoo (evitar superar 1 req/s si se sincroniza con Odoo).
+- Reintentos automáticos y tolerancia a fallos.
+- Escalabilidad y resiliencia ante picos de tráfico.
+
+Recomendaciones:
+- Ejecutar solo una instancia de este worker para evitar saturar Odoo.
+- Monitorear métricas y errores para detectar cuellos de botella.
+- Mantener la lógica idempotente para evitar duplicados en reintentos.
+"""
+
 import asyncio
 import json
 from app.services.queue_service import QueueService, QueueServiceError
@@ -10,7 +31,7 @@ async def process_campaign_messages(queue_service: QueueService, azure_sql_servi
     """
     Consume y procesa mensajes de la cola de campañas en un bucle infinito.
     """
-    logger.info("Worker de campaña iniciado. Esperando mensajes...")
+    logger.info("Worker de campaña iniciado. Esperando mensajes de 'manychat-campaign-queue'...")
     while True:
         message = None
         try:
@@ -43,10 +64,10 @@ async def process_campaign_messages(queue_service: QueueService, azure_sql_servi
                     manychat_id=event.manychat_id, 
                     message_id=message.id
                 )
-                await asyncio.sleep(0.5) # Pausa breve tras procesar
+                await asyncio.sleep(1) # Pausa para evitar saturar Odoo
             else:
                 # No hay mensajes, espera un poco más
-                await asyncio.sleep(2)
+                await asyncio.sleep(10)
 
         except QueueServiceError as e:
             logger.error(f"Error de servicio de colas: {e}. Reintentando en 10 segundos.", exc_info=True)
