@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -6,6 +6,7 @@ from app.db.session import SessionLocal
 from app.db import models
 from app.api import deps
 from app.schemas.advisor import AdvisorCreate, AdvisorUpdate, AdvisorInDB
+from app.core.config import get_settings
 
 router = APIRouter()
 
@@ -67,14 +68,13 @@ def update_advisor(advisor_id: int, advisor_update: AdvisorUpdate, db: Session =
     return db_advisor
 
 @router.delete("/{advisor_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar asesor por ID")
-def delete_advisor(advisor_id: int, db: Session = Depends(deps.get_db)):
-    """
-    Elimina un asesor específico usando su ID.
-    """
+def delete_advisor(advisor_id: int, api_key: str = Query(..., description="Debes ingresar el API_KEY para confirmar la eliminación"), db: Session = Depends(deps.get_db)):
+    settings = get_settings()
+    if api_key != settings.API_KEY:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API_KEY inválido. No autorizado para eliminar.")
     db_advisor = db.query(models.Advisor).filter(models.Advisor.id == advisor_id).first()
     if db_advisor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asesor no encontrado")
-    
     db.delete(db_advisor)
     db.commit()
     return {"message": "Asesor eliminado exitosamente"}

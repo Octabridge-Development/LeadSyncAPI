@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from typing import List
 
@@ -7,6 +7,7 @@ from app.db.session import SessionLocal # Usado para Type Hinting si no se usa d
 from app.db import models
 from app.api import deps # Para get_db
 from app.schemas.contact import ContactCreate, ContactUpdate, ContactInDB # Asegúrate que sean correctas
+from app.core.config import get_settings
 
 router = APIRouter()
 
@@ -70,15 +71,13 @@ def update_contact(contact_id: int, contact_update: ContactUpdate, db: Session =
     return db_contact
 
 @router.delete("/{contact_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar contacto por ID")
-def delete_contact(contact_id: int, db: Session = Depends(deps.get_db)):
-    """
-    Elimina un contacto específico usando su ID.
-    También elimina los estados relacionados en ContactState para evitar errores de integridad referencial.
-    """
+def delete_contact(contact_id: int, api_key: str = Query(..., description="Debes ingresar el API_KEY para confirmar la eliminación"), db: Session = Depends(deps.get_db)):
+    settings = get_settings()
+    if api_key != settings.API_KEY:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="API_KEY inválido. No autorizado para eliminar.")
     db_contact = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
     if db_contact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contacto no encontrado")
-    # Eliminar primero los estados relacionados
     db.query(models.ContactState).filter(models.ContactState.contact_id == contact_id).delete(synchronize_session=False)
     db.delete(db_contact)
     db.commit()

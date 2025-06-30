@@ -92,7 +92,7 @@ class CampaignContactService:
                     now = datetime.utcnow()
                     setattr(campaign_contact, field, now)
                     logger.debug(f"{field} no proporcionado y nulo en DB, usando fecha actual: {now}")
-            elif field in ["last_state"]:
+            elif field in ["last_state", "summary"]:
                 setattr(campaign_contact, field, value)
                 logger.debug(f"Actualizando {field} a '{value}'")
             # Add more fields as needed

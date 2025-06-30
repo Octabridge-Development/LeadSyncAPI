@@ -6,10 +6,18 @@ RUN apt-get update && apt-get install -y \
     gcc \
     curl \
     libpq-dev \
-    unixodbc \
-    unixodbc-dev \
-    libodbc1 \
     && rm -rf /var/lib/apt/lists/*
+
+# Eliminar paquetes ODBC conflictivos y luego instalar el driver oficial de Microsoft
+RUN apt-get update && \
+    apt-get remove -y unixodbc unixodbc-dev libodbc1 libodbcinst2 odbcinst1debian2 || true && \
+    apt-get install -y curl gnupg2 && \
+    curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - && \
+    curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list && \
+    apt-get update && \
+    ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc unixodbc-dev && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
 
 # Crear usuario no-root
 RUN useradd --create-home --shell /bin/bash app

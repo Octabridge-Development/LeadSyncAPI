@@ -1,13 +1,12 @@
-# app/core/config.py
 import os
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict # Importa SettingsConfigDict
 from functools import lru_cache
-from pydantic import Field, AnyHttpUrl
-from azure.identity import DefaultAzureCredential
-from azure.keyvault.secrets import SecretClient
+from pydantic import Field, AnyHttpUrl # AnyHttpUrl se usa para Odoo_URL
 
-# No se importa el logger aquí para evitar importaciones circulares.
+# Para Key Vault, aunque no es el foco ahora, si lo activas, asegúrate de que estas libs estén instaladas
+# from azure.identity import DefaultAzureCredential
+# from azure.keyvault.secrets import SecretClient
 
 class Settings(BaseSettings):
     # --- Configuración General ---
@@ -17,7 +16,11 @@ class Settings(BaseSettings):
     PORT: int = Field(8000, alias="PORT")
 
     # --- Odoo ---
-    ODOO_URL: AnyHttpUrl = Field(..., alias="ODOO_URL")
+    # Usar str para URLs si no quieres la validación estricta de HttpUrl en `.env`
+    # Odoo_URL es un buen candidato para HttpUrl, pero puede dar problemas si la URL no es perfecta.
+    # Si quieres que Pydantic valide estrictamente la URL, mantén AnyHttpUrl.
+    # Si prefieres más flexibilidad, cámbialo a str. Aquí lo mantengo como AnyHttpUrl.
+    ODOO_URL: AnyHttpUrl = Field(..., alias="ODOO_URL") 
     ODOO_DB: str = Field(..., alias="ODOO_DB")
     ODOO_USERNAME: str = Field(..., alias="ODOO_USERNAME")
     ODOO_PASSWORD: str = Field(..., alias="ODOO_PASSWORD")
@@ -34,19 +37,34 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = Field("json", alias="LOG_FORMAT")
     APPINSIGHTS_INSTRUMENTATION_KEY: Optional[str] = Field(None, alias="APPINSIGHTS_INSTRUMENTATION_KEY")
     
-    class Config:
-        env_file = os.getenv("ENV_FILE", ".env")
-        env_file_encoding = "utf-8"
+    # --- CAMBIO CLAVE AQUÍ: Usar model_config para Pydantic v2 ---
+    model_config = SettingsConfigDict(
+        env_file=os.getenv("ENV_FILE", ".env"), # Lee el archivo .env especificado por ENV_FILE o por defecto .env
+        env_file_encoding="utf-8",
+        extra='ignore' # Ignora variables en el .env que no estén definidas en la clase Settings
+    )
+    # -----------------------------------------------------------
 
     def load_secrets_from_key_vault(self):
         """Carga secretos desde Azure Key Vault si está habilitado."""
         if self.USE_KEY_VAULT and self.KEY_VAULT_NAME:
+            # Importaciones condicionales para evitar errores si no se usan las libs de Azure
+            try:
+                from azure.identity import DefaultAzureCredential
+                from azure.keyvault.secrets import SecretClient
+            except ImportError:
+                print("ERROR: Las librerías 'azure-identity' o 'azure-keyvault-secrets' no están instaladas.")
+                print("Instala con: pip install azure-identity azure-keyvault-secrets")
+                raise
+
             print(f"INFO: Cargando secretos desde Azure Key Vault: {self.KEY_VAULT_NAME}...")
             try:
                 credential = DefaultAzureCredential()
                 key_vault_url = f"https://{self.KEY_VAULT_NAME}.vault.azure.net"
                 client = SecretClient(vault_url=key_vault_url, credential=credential)
 
+                # Usar setattr para asignar directamente a los campos de la instancia
+                # Los nombres de los secretos en Key Vault deben coincidir con estos (ej. "API-KEY")
                 self.API_KEY = client.get_secret("API-KEY").value
                 self.ODOO_PASSWORD = client.get_secret("ODOO-PASSWORD").value
                 self.AZURE_STORAGE_CONNECTION_STRING = client.get_secret("AZURE-STORAGE-CONNECTION-STRING").value
