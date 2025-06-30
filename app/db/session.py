@@ -86,8 +86,8 @@ def get_db() -> Generator[Session, None, None]:
     La sesión se cierra automáticamente después de que el endpoint ha sido procesado.
     Uso (en FastAPI): db: Session = Depends(get_db)
     """
-    # --- CAMBIO AQUÍ: Reutiliza el context manager principal ---
-    yield from get_db_session() 
+    with get_db_session() as db:
+        yield db
 
 # --- 6. Función específica para Workers ---
 # Esta función es para ser usada explícitamente por tus workers asíncronos.
@@ -96,8 +96,8 @@ def get_db_session_worker() -> Generator[Session, None, None]: # <--- FUNCIÓN A
     Proporciona una sesión de base de datos para los procesos de worker.
     Reutiliza get_db_session para asegurar el manejo transaccional adecuado.
     """
-    # --- CAMBIO AQUÍ: Reutiliza el context manager principal ---
-    yield from get_db_session() 
+    with get_db_session() as db:
+        yield db
 
 # --- 7. Función para Verificar la Conexión a la Base de Datos ---
 # Útil para comprobar si tu aplicación puede conectarse al inicio.

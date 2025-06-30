@@ -53,6 +53,9 @@ logger.info(f"SYNC_INTERVAL: {SYNC_INTERVAL} segundos")
 
 def sync_pending_contacts():
     session = SessionLocal()
+    success_count = 0
+    error_count = 0
+    updated_count = 0
     try:
         # Procesar contactos con estado 'pending' o 'error'
         pending_contacts = session.query(Contact).filter(
@@ -64,14 +67,24 @@ def sync_pending_contacts():
         for contact in pending_contacts:
             try:
                 logger.info(f"Sincronizando contacto ID {contact.id} (manychat_id={contact.manychat_id}) a Odoo...")
-                odoo_id = odoo_service.create_or_update_contact(contact)
-                contact.odoo_contact_id = odoo_id
-                contact.odoo_sync_status = "success"
-                logger.info(f"Contacto ID {contact.id} sincronizado correctamente en Odoo (odoo_id={odoo_id})")
+                odoo_id = odoo_service.create_or_update_odoo_contact(contact)
+                # Verificar si fue update o create
+                if contact.odoo_contact_id and str(contact.odoo_contact_id) == str(odoo_id):
+                    contact.odoo_sync_status = "updated"
+                    updated_count += 1
+                    logger.info(f"Contacto ID {contact.id} actualizado en Odoo (odoo_id={odoo_id})")
+                else:
+                    contact.odoo_contact_id = odoo_id
+                    contact.odoo_sync_status = "success"
+                    success_count += 1
+                    logger.info(f"Contacto ID {contact.id} creado en Odoo (odoo_id={odoo_id})")
             except Exception as e:
                 contact.odoo_sync_status = "error"
+                error_count += 1
                 logger.error(f"Error al sincronizar contacto ID {contact.id}: {e}")
             session.commit()
+            time.sleep(1)  # Rate limit Odoo
+        logger.info(f"Resumen ciclo: success={success_count}, updated={updated_count}, error={error_count}")
     except Exception as e:
         logger.error(f"Error general en sync_pending_contacts: {e}")
     finally:

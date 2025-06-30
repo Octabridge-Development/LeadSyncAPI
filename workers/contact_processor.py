@@ -22,20 +22,22 @@ Recomendaciones:
 import asyncio
 import json
 from app.services.queue_service import QueueService, QueueServiceError
+from app.services.odoo_service import odoo_service
 from app.services.azure_sql_service import AzureSQLService
 from app.schemas.manychat import ManyChatContactEvent
 from app.core.logging import logger
+from app.db.models import Contact
 
 async def process_contact_events(queue_service: QueueService, sql_service: AzureSQLService):
     """
     Worker para procesar eventos de contacto desde la cola.
+    Sincroniza con Odoo tras guardar en SQL y actualiza estado en Azure.
     """
     logger.info("Worker de contactos iniciado. Escuchando 'manychat-contact-queue'...")
     while True:
         message = None
         try:
             message = await queue_service.receive_message(queue_service.contact_queue_name)
-            
             if message:
                 logger.info(f"Mensaje recibido de la cola de contactos. ID: {message.id}")
                 event_data = json.loads(message.content)
@@ -45,7 +47,28 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 result = await sql_service.process_contact_event(event)
                 logger.info(f"Evento de contacto procesado: {result}")
 
-                # CORRECCIÓN: Elimina el mensaje de forma ASÍNCRONA
+                # Sincronizar con Odoo
+                try:
+                    # Recuperar contacto actualizado de SQL
+                    contact = None
+                    with sql_service.__class__.__bases__[0].__globals__["get_db_session"]() as db:
+                        repo = db.query(type(result["contact_id"])) if "contact_id" in result else None
+                        contact = db.query(Contact).filter(Contact.id == result["contact_id"]).first() if "contact_id" in result else None
+                    if contact:
+                        odoo_id = odoo_service.create_or_update_odoo_contact(contact)
+                        # Estado: updated si ya existía, success si es nuevo
+                        if contact.odoo_contact_id and str(contact.odoo_contact_id) == str(odoo_id):
+                            sql_service.update_odoo_sync_status(contact.manychat_id, "updated", odoo_id)
+                            logger.info(f"Contacto {contact.id} actualizado en Odoo (odoo_id={odoo_id})")
+                        else:
+                            sql_service.update_odoo_sync_status(contact.manychat_id, "success", odoo_id)
+                            logger.info(f"Contacto {contact.id} creado en Odoo (odoo_id={odoo_id})")
+                    else:
+                        logger.warning(f"No se encontró el contacto en SQL para sincronizar con Odoo.")
+                except Exception as sync_e:
+                    sql_service.update_odoo_sync_status(event.manychat_id, "error")
+                    logger.error(f"Error al sincronizar contacto con Odoo: {sync_e}")
+
                 await queue_service.delete_message(
                     queue_name=queue_service.contact_queue_name, 
                     message_id=message.id, 
@@ -54,13 +77,12 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 await asyncio.sleep(1) # Pausa para evitar saturar Odoo
             else:
                 await asyncio.sleep(10) # Espera más si no hay mensajes
-
         except QueueServiceError as e:
             logger.error(f"Error de servicio de colas en worker de contactos: {e}", exc_info=True)
             await asyncio.sleep(60) # Espera un minuto antes de reintentar
         except Exception as e:
             logger.error(f"Error inesperado en worker de contactos: {e}", exc_info=True)
-            if message: # Si el error ocurrió después de recibir un mensaje, intenta eliminarlo
+            if message:
                 try:
                     await queue_service.delete_message(
                         queue_name=queue_service.contact_queue_name,
