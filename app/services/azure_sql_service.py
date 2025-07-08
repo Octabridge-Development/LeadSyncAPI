@@ -125,6 +125,37 @@ class AzureSQLService:
             self.logger.error(f"Error procesando evento de campaña: {str(e)}", exc_info=True)
             raise
 
+    async def process_crm_lead_event(self, event) -> dict:
+        """
+        Procesa un evento CRMLeadEvent y registra el tracking en Azure SQL.
+        Reutiliza lógica de contacto y agrega tracking específico de CRM.
+        """
+        try:
+            with get_db_session() as db:
+                contact_repo = ContactRepository(db)
+                # Buscar o crear contacto por manychat_id
+                contact = contact_repo.get_by_manychat_id(event.manychat_id)
+                if not contact:
+                    # Si no existe, crea un nuevo contacto mínimo
+                    contact_data = {
+                        "manychat_id": event.manychat_id,
+                        "first_name": event.first_name,
+                        "last_name": event.last_name,
+                        "phone": event.phone,
+                        "entry_date": event.entry_date,
+                        "channel": event.channel,
+                        "medical_advisor_id": event.medical_advisor_id,
+                        "commercial_advisor_id": event.commercial_advisor_id
+                    }
+                    contact = contact_repo.create(contact_data)
+                # Aquí podrías agregar tracking específico de CRM (por ejemplo, guardar el estado del lead)
+                # TODO: Implementar tabla/log de estados de lead CRM si es necesario
+                self.logger.info(f"Processed CRM event for contact {contact.manychat_id} (CRM tracking not fully implemented)")
+                return {"contact_id": contact.id, "status": "success", "manychat_id": contact.manychat_id}
+        except Exception as e:
+            self.logger.error(f"Error processing CRM lead event: {str(e)}", exc_info=True)
+            raise
+
     def update_odoo_sync_status(self, manychat_id: str, status: str, odoo_contact_id: Optional[str] = None) -> Optional[Contact]:
         """
         Actualiza el estado de sincronización y el odoo_contact_id en un contacto de Azure SQL.
