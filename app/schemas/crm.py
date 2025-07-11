@@ -6,7 +6,7 @@ from typing import Optional
 
 class CRMLeadState(BaseModel):
     """Esquema para el estado del lead dentro del payload de ManyChat."""
-    sequence: int = Field(..., ge=0, le=10) # [cite: 80, 115] Campo obligatorio, debe estar entre 0 y 10.
+    sequence: int = Field(..., ge=0, le=20) # Ampliado para soportar todas las etapas de Odoo
     summary: Optional[str] = None # [cite: 76]
     date: datetime # [cite: 76, 82]
 

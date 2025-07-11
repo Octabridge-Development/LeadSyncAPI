@@ -21,6 +21,7 @@ Recomendaciones:
 """
 import asyncio
 import json
+import os
 from app.services.queue_service import QueueService, QueueServiceError
 from app.services.odoo_service import odoo_service
 from app.services.azure_sql_service import AzureSQLService
@@ -33,7 +34,8 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
     Worker para procesar eventos de contacto desde la cola.
     Sincroniza con Odoo tras guardar en SQL y actualiza estado en Azure.
     """
-    logger.info("Worker de contactos iniciado. Escuchando 'manychat-contact-queue'...")
+    sync_interval = int(os.getenv("SYNC_INTERVAL", 10))  # segundos entre ciclos
+    logger.info(f"Worker de contactos iniciado. Escuchando 'manychat-contact-queue'... Intervalo: {sync_interval}s")
     while True:
         message = None
         try:
@@ -74,12 +76,13 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                     message_id=message.id, 
                     pop_receipt=message.pop_receipt
                 )
-                await asyncio.sleep(1) # Pausa para evitar saturar Odoo
+                await asyncio.sleep(sync_interval) # Espera configurable
             else:
-                await asyncio.sleep(10) # Espera más si no hay mensajes
+                logger.info(f"No hay mensajes en la cola de contactos. Esperando {sync_interval} segundos...")
+                await asyncio.sleep(sync_interval)
         except QueueServiceError as e:
             logger.error(f"Error de servicio de colas en worker de contactos: {e}", exc_info=True)
-            await asyncio.sleep(60) # Espera un minuto antes de reintentar
+            await asyncio.sleep(sync_interval)
         except Exception as e:
             logger.error(f"Error inesperado en worker de contactos: {e}", exc_info=True)
             if message:
@@ -92,7 +95,7 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                     logger.warning("Mensaje potencialmente problemático eliminado.", message_id=message.id)
                 except Exception as del_e:
                     logger.error(f"Fallo al intentar eliminar mensaje problemático: {del_e}", message_id=message.id)
-            await asyncio.sleep(10)
+            await asyncio.sleep(sync_interval)
 
 async def main():
     """

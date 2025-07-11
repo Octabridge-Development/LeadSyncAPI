@@ -42,32 +42,34 @@ class OdooCRMService:
 
     def create_or_update_lead(self, lead_data: dict):
         """
-        Lógica principal: busca un lead abierto y lo actualiza. Si no existe, crea uno nuevo. [cite: 57, 61]
+        Lógica principal: busca un lead abierto y lo actualiza. Si no existe, crea uno nuevo.
         """
-        manychat_id = lead_data['manychat_id'] # [cite: 62]
-        
-        # 1. Buscar leads ABIERTOS para este ManyChat ID [cite: 25, 63]
+        manychat_id = lead_data['manychat_id']
+        sequence = lead_data['state']['sequence']
+        # Mapeo de secuencia a stage_id según tabla Odoo
+        sequence_to_stage_id = {
+            0: 16, 1: 17, 2: 18, 3: 19, 4: 20, 5: 21, 6: 22, 7: 23, 8: 24, 9: 25, 10: 26,
+            11: 27, 12: 28, 13: 9, 14: 10, 15: 11, 16: 1, 17: 5, 18: 6, 19: 7, 20: 13
+        }
+        stage_id = sequence_to_stage_id.get(sequence)
+        if stage_id is None:
+            raise ValueError(f"Secuencia {sequence} no mapeada a stage_id de Odoo")
+        # 1. Buscar leads ABIERTOS para este ManyChat ID
         open_lead_id = self._find_open_lead(manychat_id)
-        
         # 2. Preparar los valores a escribir en Odoo
         prepared_values = self._prepare_lead_values(lead_data)
-
-        # Aquí el worker deberá añadir el 'stage_id' correcto a 'prepared_values'
-        # Ejemplo: sequence = lead_data['state']['sequence']
-        # stage_id = odoo_connector.search('crm.stage', [('sequence', '=', sequence)])[0]
-        # prepared_values['stage_id'] = stage_id
-
+        prepared_values['stage_id'] = stage_id
         if open_lead_id:
-            # 3. Si existe un lead abierto, actualizarlo [cite: 69]
-            print(f"Actualizando lead existente (ID: {open_lead_id}) en Odoo.")
-            # odoo_connector.write('crm.lead', [open_lead_id], prepared_values) [cite: 70]
-            return {"status": "updated", "odoo_id": open_lead_id}
+            # 3. Si existe un lead abierto, actualizarlo y moverlo de etapa
+            print(f"Actualizando lead existente (ID: {open_lead_id}) en Odoo a stage_id {stage_id}.")
+            # odoo_connector.write('crm.lead', [open_lead_id], prepared_values)
+            return {"status": "updated", "odoo_id": open_lead_id, "stage_id": stage_id}
         else:
-            # 4. Si no hay leads abiertos, crear uno nuevo [cite: 26, 71]
-            print("Creando nuevo lead en Odoo.")
-            # new_lead_id = odoo_connector.create('crm.lead', prepared_values) [cite: 72]
-            # return {"status": "created", "odoo_id": new_lead_id}
-            return {"status": "created", "odoo_id": "dummy_id"} # Placeholder
+            # 4. Si no hay leads abiertos, crear uno nuevo en la etapa indicada
+            print(f"Creando nuevo lead en Odoo en stage_id {stage_id}.")
+            # new_lead_id = odoo_connector.create('crm.lead', prepared_values)
+            # return {"status": "created", "odoo_id": new_lead_id, "stage_id": stage_id}
+            return {"status": "created", "odoo_id": "dummy_id", "stage_id": stage_id} # Placeholder
 
 # Instancia del servicio para ser usada por otros módulos
 odoo_crm_service = OdooCRMService()

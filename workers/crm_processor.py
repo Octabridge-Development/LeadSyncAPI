@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from app.services.queue_service import QueueService
 from app.services.azure_sql_service import AzureSQLService
 from app.services.odoo_crm_service import OdooCRMService
@@ -27,13 +28,15 @@ class CRMProcessor:
         self.azure_sql_service = AzureSQLService()
         self.odoo_crm_service = OdooCRMService()
         self.queue_name = self.queue_service.crm_queue_name
+        self.sync_interval = int(os.getenv("SYNC_INTERVAL", 10))  # segundos entre ciclos
 
     async def process(self):
         while True:
             try:
                 message = await self.queue_service.receive_message(self.queue_name)
                 if not message:
-                    await asyncio.sleep(1)
+                    logging.info(f"No hay mensajes en la cola '{self.queue_name}'. Esperando {self.sync_interval} segundos...")
+                    await asyncio.sleep(self.sync_interval)
                     continue
                 data = json.loads(message.content)
                 try:
@@ -59,7 +62,7 @@ class CRMProcessor:
                 logging.info(f"Processed CRM event for manychat_id: {event.manychat_id}")
             except Exception as e:
                 logging.error(f"Error processing CRM event: {e}")
-            await asyncio.sleep(1)  # Rate limiting
+            await asyncio.sleep(self.sync_interval)  # Espera configurable entre ciclos
 
 def main():
     logging.basicConfig(level=logging.INFO)

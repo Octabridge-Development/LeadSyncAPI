@@ -3,6 +3,8 @@ from app.db.repositories import (
     ContactRepository, ContactStateRepository, ChannelRepository,
     CampaignRepository, AdvisorRepository, CampaignContactRepository 
 )
+# [AÑADIDO] Importa el schema de CRM para el type hinting
+from app.schemas.crm import CRMLeadEvent
 from app.schemas.manychat import ManyChatContactEvent, ManyChatCampaignAssignmentEvent 
 from app.db.models import Contact # Importa el modelo Contact, que tiene odoo_contact_id y odoo_sync_status
 from typing import Optional
@@ -125,36 +127,41 @@ class AzureSQLService:
             self.logger.error(f"Error procesando evento de campaña: {str(e)}", exc_info=True)
             raise
 
-    async def process_crm_lead_event(self, event) -> dict:
+    # --- [BLOQUE AÑADIDO] ---
+    async def process_crm_lead_event(self, event: CRMLeadEvent) -> dict:
         """
-        Procesa un evento CRMLeadEvent y registra el tracking en Azure SQL.
-        Reutiliza lógica de contacto y agrega tracking específico de CRM.
+        Procesa un evento de CRM para tracking en Azure SQL.
+        Esta función será llamada por el worker de CRM antes de sincronizar con Odoo.
         """
+        self.logger.info(f"Procesando evento de tracking CRM para manychat_id: {event.manychat_id}")
         try:
             with get_db_session() as db:
                 contact_repo = ContactRepository(db)
-                # Buscar o crear contacto por manychat_id
+                state_repo = ContactStateRepository(db)
+
+                # 1. Busca el contacto para asociar el estado
                 contact = contact_repo.get_by_manychat_id(event.manychat_id)
                 if not contact:
-                    # Si no existe, crea un nuevo contacto mínimo
-                    contact_data = {
-                        "manychat_id": event.manychat_id,
-                        "first_name": event.first_name,
-                        "last_name": event.last_name,
-                        "phone": event.phone,
-                        "entry_date": event.entry_date,
-                        "channel": event.channel,
-                        "medical_advisor_id": event.medical_advisor_id,
-                        "commercial_advisor_id": event.commercial_advisor_id
-                    }
-                    contact = contact_repo.create(contact_data)
-                # Aquí podrías agregar tracking específico de CRM (por ejemplo, guardar el estado del lead)
-                # TODO: Implementar tabla/log de estados de lead CRM si es necesario
-                self.logger.info(f"Processed CRM event for contact {contact.manychat_id} (CRM tracking not fully implemented)")
-                return {"contact_id": contact.id, "status": "success", "manychat_id": contact.manychat_id}
+                    # Idealmente, el contacto ya debería existir por un evento anterior.
+                    # Podrías decidir crearlo aquí si no existe.
+                    self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de CRM. Se omitirá el tracking de estado.")
+                    raise ValueError(f"Contact not found for CRM event tracking: {event.manychat_id}")
+
+                # 2. Reutiliza la lógica para crear un nuevo estado, pero con categoría "crm"
+                state_summary = f"Seq {event.state.sequence}: {event.state.summary or 'Update'}"
+                state = state_repo.create(
+                    contact_id=contact.id,
+                    state=state_summary, # Guardamos un resumen del estado del lead
+                    category="crm" # Categoría para diferenciarlo de otros estados
+                )
+
+                self.logger.info(f"Evento de CRM registrado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
+                return {"status": "success", "contact_id": contact.id, "state_id": state.id}
+
         except Exception as e:
-            self.logger.error(f"Error processing CRM lead event: {str(e)}", exc_info=True)
+            self.logger.error(f"Error procesando evento de tracking CRM: {str(e)}", exc_info=True)
             raise
+    # --- [FIN DEL BLOQUE AÑADIDO] ---
 
     def update_odoo_sync_status(self, manychat_id: str, status: str, odoo_contact_id: Optional[str] = None) -> Optional[Contact]:
         """
