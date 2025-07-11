@@ -40,7 +40,7 @@ async def receive_lead_event(
     background_tasks.add_task(
         queue_service.send_message,
         queue_name="manychat-crm-queue", #
-        message_body=event.model_dump_json()
+        event_data=event.model_dump()  # <-- ahora pasa un dict, no un string
     )
 
     # 2. Responder inmediatamente al cliente

@@ -1,3 +1,5 @@
+from app.services.odoo_service import odoo_service
+
 # app/services/odoo_crm_service.py
 
 # Suponiendo que tienes una forma de conectar con Odoo, ej. a través de odoorpc o una librería similar.
@@ -11,65 +13,63 @@ class OdooCRMService:
 
     def _find_open_lead(self, manychat_id: str):
         """
-        Busca un lead abierto (sequence < 10) para un manychat_id específico. [cite: 58]
+        Busca un lead abierto (stage_id < 10) para un manychat_id específico en Odoo.
         """
-        print(f"Buscando lead abierto para manychat_id: {manychat_id}")
-        # Lógica para buscar en Odoo
         search_criteria = [
-            ('x_studio_manychatid_crm', '=', manychat_id), # [cite: 66]
-            ('stage_id.sequence', '<', 10) # [cite: 67]
+            ('x_studio_manychatid_crm', '=', manychat_id),
+            ('stage_id', '!=', False),
+            ('stage_id.sequence', '<', 10)
         ]
-        # open_leads = odoo_connector.search('crm.lead', search_criteria)
-        # return open_leads[0] if open_leads else None
-        pass # Reemplazar con la llamada real a Odoo
+        lead_ids = odoo_service.execute('crm.lead', 'search', search_criteria)
+        return lead_ids[0] if lead_ids else None
 
-    def _prepare_lead_values(self, lead_data: dict) -> dict:
+    def _get_odoo_partner_id(self, manychat_id):
         """
-        Mapea los datos de ManyChat al formato requerido por Odoo.
+        Busca el contacto en Odoo por ManychatID y retorna su partner_id.
         """
-        # El worker buscará el stage_id basado en la secuencia.
-        # Aquí preparamos el resto de los valores.
-        return {
-            "name": f"Oportunidad para {lead_data['first_name']}",
-            "contact_name": f"{lead_data['first_name']} {lead_data.get('last_name', '')}".strip(),
-            "phone": lead_data.get('phone'),
-            "description": lead_data['state']['summary'], # [cite: 157]
-            "x_studio_manychatid_crm": lead_data['manychat_id'], # [cite: 152]
-            "x_studio_asesor_medico": lead_data.get('medical_advisor_id'), # [cite: 153]
-            "x_studio_asesor_comercial": lead_data.get('commercial_advisor_id'), # [cite: 154]
-            # Nota: 'stage_id' se manejará por separado, buscando el id a partir de 'sequence'.
-        }
+        partner_ids = odoo_service.execute('res.partner', 'search', [('x_studio_manychatid_customer', '=', manychat_id)])
+        return partner_ids[0] if partner_ids else None
 
-    def create_or_update_lead(self, lead_data: dict):
+    def _prepare_lead_values(self, lead_data):
         """
-        Lógica principal: busca un lead abierto y lo actualiza. Si no existe, crea uno nuevo.
+        Mapea los datos de ManyChat al formato requerido por Odoo, incluyendo el contacto relacionado.
         """
-        manychat_id = lead_data['manychat_id']
-        sequence = lead_data['state']['sequence']
-        # Mapeo de secuencia a stage_id según tabla Odoo
-        sequence_to_stage_id = {
-            0: 16, 1: 17, 2: 18, 3: 19, 4: 20, 5: 21, 6: 22, 7: 23, 8: 24, 9: 25, 10: 26,
-            11: 27, 12: 28, 13: 9, 14: 10, 15: 11, 16: 1, 17: 5, 18: 6, 19: 7, 20: 13
+        partner_id = self._get_odoo_partner_id(lead_data.manychat_id)
+        full_name = f"{lead_data.first_name} {lead_data.last_name or ''}".strip()
+        vals = {
+            "name": full_name,  # El nombre de la oportunidad será el nombre completo del contacto
+            "contact_name": full_name,
+            "phone": lead_data.phone,
+            "description": lead_data.state.summary,
+            "x_studio_manychatid_crm": lead_data.manychat_id,
+            "x_studio_asesor_medico": lead_data.medical_advisor_id,
+            "x_studio_asesor_comercial": lead_data.commercial_advisor_id,
+            "partner_id": partner_id,
         }
-        stage_id = sequence_to_stage_id.get(sequence)
-        if stage_id is None:
-            raise ValueError(f"Secuencia {sequence} no mapeada a stage_id de Odoo")
-        # 1. Buscar leads ABIERTOS para este ManyChat ID
-        open_lead_id = self._find_open_lead(manychat_id)
-        # 2. Preparar los valores a escribir en Odoo
+        # Puedes agregar más campos aquí si lo necesitas
+        return vals
+
+    def create_or_update_lead(self, lead_data):
+        """
+        Busca un lead abierto y lo actualiza. Si no existe, crea uno nuevo en Odoo.
+        """
+        manychat_id = lead_data.manychat_id
+        state = lead_data.state
+        stage_id = getattr(state, 'stage_id', None)
         prepared_values = self._prepare_lead_values(lead_data)
         prepared_values['stage_id'] = stage_id
+        # Buscar lead abierto
+        open_lead_id = self._find_open_lead(manychat_id)
         if open_lead_id:
-            # 3. Si existe un lead abierto, actualizarlo y moverlo de etapa
+            # Actualizar lead existente
+            odoo_service.execute('crm.lead', 'write', [open_lead_id], prepared_values)
             print(f"Actualizando lead existente (ID: {open_lead_id}) en Odoo a stage_id {stage_id}.")
-            # odoo_connector.write('crm.lead', [open_lead_id], prepared_values)
             return {"status": "updated", "odoo_id": open_lead_id, "stage_id": stage_id}
         else:
-            # 4. Si no hay leads abiertos, crear uno nuevo en la etapa indicada
+            # Crear nuevo lead
+            new_lead_id = odoo_service.execute('crm.lead', 'create', prepared_values)
             print(f"Creando nuevo lead en Odoo en stage_id {stage_id}.")
-            # new_lead_id = odoo_connector.create('crm.lead', prepared_values)
-            # return {"status": "created", "odoo_id": new_lead_id, "stage_id": stage_id}
-            return {"status": "created", "odoo_id": "dummy_id", "stage_id": stage_id} # Placeholder
+            return {"status": "created", "odoo_id": new_lead_id, "stage_id": stage_id}
 
 # Instancia del servicio para ser usada por otros módulos
 odoo_crm_service = OdooCRMService()

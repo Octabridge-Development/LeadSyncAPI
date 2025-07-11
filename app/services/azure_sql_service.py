@@ -148,7 +148,7 @@ class AzureSQLService:
                     raise ValueError(f"Contact not found for CRM event tracking: {event.manychat_id}")
 
                 # 2. Reutiliza la lógica para crear un nuevo estado, pero con categoría "crm"
-                state_summary = f"Seq {event.state.sequence}: {event.state.summary or 'Update'}"
+                state_summary = f"Stage {event.state.stage_id}: {event.state.summary or 'Update'}"
                 state = state_repo.create(
                     contact_id=contact.id,
                     state=state_summary, # Guardamos un resumen del estado del lead

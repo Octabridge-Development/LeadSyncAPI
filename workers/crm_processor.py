@@ -22,6 +22,9 @@ STAGE_SEQUENCE_TO_ID = {
     10: 26, # Orden de Venta Confirmada (CERRADA)
 }
 
+# Lista de stage_id válidos en Odoo
+VALID_STAGE_IDS = {16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}
+
 class CRMProcessor:
     def __init__(self):
         self.queue_service = QueueService()
@@ -46,17 +49,15 @@ class CRMProcessor:
                     # Aquí podrías enviar a DLQ si lo deseas
                     await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
                     continue
-                # Validar sequence
-                sequence = getattr(event.state, 'sequence', None)
-                if sequence is None or not (0 <= sequence <= 10):
-                    logging.error(f"Sequence inválido: {sequence}. Mensaje descartado.")
+                # Validar stage_id recibido directamente
+                stage_id = getattr(event.state, 'stage_id', None)
+                if stage_id is None or stage_id not in VALID_STAGE_IDS:
+                    logging.error(f"stage_id inválido: {stage_id}. Mensaje descartado.")
                     await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
                     continue
-                # Guardar summary en Azure SQL (debe estar en event.state.summary)
-                # Se asume que process_crm_lead_event lo maneja correctamente
+                # Usar stage_id directamente en la llamada a Odoo
                 await self.azure_sql_service.process_crm_lead_event(event)
-                # Sincronizar con Odoo CRM (el mapeo de etapas se hará en el servicio Odoo)
-                await self.odoo_crm_service.create_or_update_lead(event)
+                self.odoo_crm_service.create_or_update_lead(event)
                 # Eliminar mensaje de la cola
                 await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
                 logging.info(f"Processed CRM event for manychat_id: {event.manychat_id}")

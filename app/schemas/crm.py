@@ -6,9 +6,9 @@ from typing import Optional
 
 class CRMLeadState(BaseModel):
     """Esquema para el estado del lead dentro del payload de ManyChat."""
-    sequence: int = Field(..., ge=0, le=20) # Ampliado para soportar todas las etapas de Odoo
-    summary: Optional[str] = None # [cite: 76]
-    date: datetime # [cite: 76, 82]
+    stage_id: int = Field(..., ge=16, le=26)  # IDs válidos de Odoo
+    summary: Optional[str] = None
+    date: datetime
 
 class CRMLeadEvent(BaseModel):
     """
