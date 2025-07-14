@@ -30,12 +30,18 @@ class QueueService:
         )
         self.campaign_queue_name = "manychat-campaign-queue"
         self.contact_queue_name = "manychat-contact-queue"
+        self.crm_queue_name = "manychat-crm-queue"  # <--- Agregado
         self.dlq_name = "manychat-events-dlq"
 
     async def ensure_queues_exist(self) -> None:
         """Verifica y crea las colas necesarias de forma asíncrona si no existen."""
         logger.info("Verificando/creando colas de Azure...")
-        queues_to_ensure = [self.campaign_queue_name, self.contact_queue_name, self.dlq_name]
+        queues_to_ensure = [
+            self.campaign_queue_name,
+            self.contact_queue_name,
+            self.crm_queue_name,  # <--- Agregado para CRM
+            self.dlq_name
+        ]
         for queue_name in queues_to_ensure:
             try:
                 await self.client.create_queue(queue_name)
@@ -155,3 +161,6 @@ class QueueService:
                 # El QueueServiceClient se inicializa una vez en __init__ y se mantiene abierto.
                 # No se cierra por mensaje; el garbage collector lo hará al finalizar la aplicación.
                 pass
+
+# Instancia global para importación
+queue_service = QueueService()

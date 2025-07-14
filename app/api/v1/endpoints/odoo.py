@@ -5,9 +5,9 @@ from app.schemas.odoo_update import OdooContactUpdate
 from typing import List, Any
 from app.core.config import get_settings
 
-router = APIRouter(tags=["Odoo Contacts"], prefix="/contacts")
+router = APIRouter()  # Sin tags ni prefix globales
 
-@router.get("/short/", response_model=List[dict], tags=["Odoo Contacts"], summary="Obtener los 10 contactos más recientes (campos clave)")
+@router.get("/contacts/short/", response_model=List[dict], tags=["Odoo"], summary="Obtener los 10 contactos más recientes (campos clave)")
 def get_short_contacts():
     """Obtiene los 10 contactos más recientes de Odoo con solo los campos clave para sincronización, incluyendo manychat_id."""
     try:
@@ -20,7 +20,7 @@ def get_short_contacts():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/by_manychat_id/{manychat_id}", response_model=Any, tags=["Odoo Contacts"], summary="Obtener contacto por manychat_id")
+@router.get("/contacts/by_manychat_id/{manychat_id}", response_model=Any, tags=["Odoo"], summary="Obtener contacto por manychat_id")
 def get_contact_by_manychat_id(manychat_id: str):
     """Obtiene un contacto de Odoo (res.partner) por su manychat_id (campo x_studio_manychatid_customer)."""
     try:
@@ -35,7 +35,7 @@ def get_contact_by_manychat_id(manychat_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/{contact_id}", response_model=Any, tags=["Odoo Contacts"], summary="Eliminar contacto por ID (requiere confirmación)")
+@router.delete("/contacts/{contact_id}", response_model=Any, tags=["Odoo"], summary="Eliminar contacto por ID (requiere confirmación)")
 def delete_contact(contact_id: int, confirm: str = Query(..., description="Debes ingresar el nombre de la base de datos para confirmar la eliminación")):
     """Elimina un contacto de Odoo por ID, solo si el parámetro confirm coincide con el nombre de la base de datos."""
     settings = get_settings()
@@ -50,7 +50,7 @@ def delete_contact(contact_id: int, confirm: str = Query(..., description="Debes
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.put("/{contact_id}", response_model=Any, tags=["Odoo Contacts"], summary="Actualizar campos permitidos de un contacto por ID")
+@router.put("/contacts/{contact_id}", response_model=Any, tags=["Odoo"], summary="Actualizar campos permitidos de un contacto por ID")
 def update_contact(contact_id: int, updates: OdooContactUpdate = Body(..., description="Campos a actualizar en el contacto de Odoo")):
     """Actualiza campos permitidos de un contacto de Odoo (res.partner) por su ID."""
     try:
@@ -69,7 +69,7 @@ def update_contact(contact_id: int, updates: OdooContactUpdate = Body(..., descr
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/sync_manychat/", response_model=Any, tags=["Odoo Contacts"], summary="Sincronizar contacto por manychatID (crea o actualiza)")
+@router.post("/contacts/sync_manychat/", response_model=Any, tags=["Odoo"], summary="Sincronizar contacto por manychatID (crea o actualiza)")
 def sync_manychat_contact(contact: OdooContactCreate):
     """Crea o actualiza un contacto en Odoo según el manychatID. Si existe, actualiza teléfono/celular; si no, crea."""
     try:
