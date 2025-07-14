@@ -306,4 +306,138 @@ miasalud-integration/
 
 ---
 
-Este README fue actualizado para reflejar la arquitectura, endpoints y flujos actuales del proyecto MiaSalud Integration API.
+# MiaSalud Integration API - README actualizado
+
+## INFORME DE DESARROLLO - MIGRACIÓN A SISTEMA DE OPORTUNIDADES CRM
+Fecha: 15 de Enero, 2025
+Proyecto: MiaSalud Integration API
+Desarrolladores: Felipe y Belfort
+Tipo: Refactorización Mayor - Nueva Funcionalidad CRM
+
+### RESUMEN EJECUTIVO
+Este proyecto migra el sistema de sincronización de contactos hacia un sistema de gestión de oportunidades CRM basado en stages. Se elimina la creación automática de contactos en Odoo y se enfoca exclusivamente en la gestión de leads/oportunidades según los stages de ManyChat.
+
+### CAMBIOS PRINCIPALES
+**ANTES (Sistema Actual):**
+- ManyChat → Contactos en Azure SQL + Contactos en Odoo
+- Sincronización bidireccional de datos de contacto
+- Gestión de Campaign_Contact
+
+**DESPUÉS (Nuevo Sistema):**
+- ManyChat → Solo contactos en Azure SQL + Oportunidades CRM en Odoo
+- Mapeo de stages ManyChat → stages Odoo CRM
+- Sin sincronización de contactos con Odoo
+
+### MAPEO DE STAGES MANYCHAT ↔ ODOO
+| ManyChat Stage                        | Odoo Stage ID | Odoo Stage Name                  |
+|---------------------------------------|---------------|----------------------------------|
+| Recién Suscrito (Sin Asignar)         | 16            | Recién Suscrito Sin Asignar      |
+| Recién suscrito Pendiente de AC       | 17            | Recién Suscrito Pendiente AC     |
+| Retornó en AC                         | 18            | Retornó en AC                    |
+| Comienza Atención Comercial           | 19            | Comienza AC                      |
+| Retornó a Asesoría especializada      | 20            | Retorno a AE                     |
+| Derivado Asesoría Médica              | 21            | Derivado a AE                    |
+| Comienza Asesoría Médica              | 22            | Comienza AE                      |
+| Terminó Asesoría Médica               | 23            | Terminó AE                       |
+| No terminó Asesoría especializada     | 24            | No Termino AE Derivado AC        |
+| Comienza Cotización                   | 25            | Comienza Cotización              |
+| Orden de venta Confirmada             | 26            | Orden de Venta Confirmada        |
+
+### FLUJO FINAL DEL SISTEMA
+1. ManyChat envía eventos de contacto y stage-change.
+2. Contactos se guardan solo en Azure SQL.
+3. Oportunidades CRM se crean/actualizan en Odoo según el stage recibido.
+4. No se crean ni actualizan contactos en Odoo.
+5. Auditoría y registro en Azure SQL.
+
+### COMPONENTES ELIMINADOS/MODIFICADOS
+- Eliminado: workers/odoo_sync_worker.py
+- Eliminado: sincronización de contactos en contact_processor.py
+- Eliminado: métodos de Odoo en azure_sql_service.py relacionados con contactos
+- Eliminado: endpoints de sincronización de contactos con Odoo
+- Modificado: workers/contact_processor.py (solo Azure SQL)
+- Modificado: workers/crm_processor.py (gestión de oportunidades)
+- Modificado: app/services/azure_sql_service.py (solo Azure SQL)
+- Modificado: app/api/v1/router.py (nuevas rutas CRM)
+
+### NUEVOS COMPONENTES
+- app/schemas/crm_opportunity.py: Schema para eventos de oportunidad CRM
+- app/api/v1/endpoints/crm_opportunities.py: Endpoint para cambios de stage
+- app/services/odoo_crm_opportunity_service.py: Servicio para oportunidades CRM en Odoo
+- Nueva cola: manychat-crm-opportunities-queue
+
+### EJEMPLOS DE PAYLOAD
+**Contacto:**
+```json
+{
+  "manychat_id": "string",
+  "nombre_lead": "string",
+  "apellido_lead": "string",
+  "whatsapp": "string",
+  "email_lead": "string",
+  "datetime_suscripcion": "2025-07-11T17:14:31.220Z",
+  "datetime_actual": "2025-07-11T17:14:31.220Z",
+  "ultimo_estado": "string",
+  "canal_entrada": "string",
+  "estado_inicial": "string"
+}
+```
+**Oportunidad CRM:**
+```json
+{
+  "manychat_id": "string",
+  "first_name": "string",
+  "last_name": "string",
+  "phone": "string",
+  "channel": "string",
+  "entry_date": "2025-07-11T17:14:31.220Z",
+  "medical_advisor_id": 0,
+  "commercial_advisor_id": 0,
+  "state": {
+    "stage_id": 17,
+    "summary": "string",
+    "date": "2025-07-11T17:14:31.220Z"
+  }
+}
+```
+
+### CRITERIOS DE ÉXITO
+1. Contactos nuevos SOLO en Azure SQL (no en Odoo)
+2. Oportunidades CRM creadas correctamente según stage de ManyChat
+3. Mapeo 1:1 perfecto entre stages ManyChat y Odoo
+4. Sin errores en producción durante la migración
+5. Performance mantenida o mejorada (menos calls a Odoo)
+
+### COORDINACIÓN Y TESTING
+- Daily standups durante la migración
+- Code review cruzado antes de merge
+- Testing conjunto antes del deploy
+- Backup completo antes de cambios
+
+---
+
+## Diferencias entre ramas: Backup vs. Nueva Migración CRM
+
+### Rama actual: `release/contactos-odoo-backup`
+- Sincroniza contactos de ManyChat tanto en Azure SQL como en Odoo.
+- Mantiene la lógica de creación y actualización de contactos en Odoo.
+- Incluye workers y endpoints para sincronización bidireccional de contactos.
+- CampaignContact y campañas siguen sincronizándose con Odoo.
+- El worker `odoo_sync_worker.py` está presente y activo.
+- El procesamiento de contactos incluye el campo `odoo_sync_status` y el ID de Odoo.
+- El sistema permite la gestión y consulta de contactos en Odoo desde la API.
+
+### Nueva rama: `feature/crm-opportunities-only`
+- Elimina la sincronización de contactos con Odoo: los contactos solo se guardan en Azure SQL.
+- Se enfoca exclusivamente en la gestión de oportunidades CRM (leads) en Odoo, según los stages de ManyChat.
+- Implementa mapeo automático de stages ManyChat → Odoo CRM.
+- El worker de contactos solo registra en Azure SQL, sin llamadas a Odoo.
+- El worker de oportunidades CRM crea/actualiza leads en Odoo, pero no contactos.
+- Elimina el worker `odoo_sync_worker.py` y toda la lógica relacionada.
+- Actualiza endpoints y servicios para reflejar el nuevo flujo CRM.
+- Mantiene la estructura de base de datos y sistema de colas.
+- Mejora la performance al reducir llamadas a Odoo.
+
+---
+
+Para detalles técnicos y ejemplos de payloads, consulta el informe de migración y la documentación interna de la rama `feature/crm-opportunities-only`.
