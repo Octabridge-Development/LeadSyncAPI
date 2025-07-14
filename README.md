@@ -306,4 +306,30 @@ miasalud-integration/
 
 ---
 
+## Diferencias clave respecto a la rama de backup (`release/contactos-odoo-backup`)
+
+### Esta rama (`feature/crm-opportunities-only`):
+- Elimina la sincronización de contactos con Odoo: los contactos solo se guardan en Azure SQL.
+- Se enfoca exclusivamente en la gestión de oportunidades CRM (leads) en Odoo, según los stages de ManyChat.
+- Implementa mapeo automático de stages ManyChat → Odoo CRM.
+- El worker de contactos solo registra en Azure SQL, sin llamadas a Odoo.
+- El worker de oportunidades CRM crea/actualiza leads en Odoo, pero no contactos.
+- Elimina el worker `odoo_sync_worker.py` y toda la lógica relacionada.
+- Actualiza endpoints y servicios para reflejar el nuevo flujo CRM.
+- Mantiene la estructura de base de datos y sistema de colas.
+- Mejora la performance al reducir llamadas a Odoo.
+
+### Rama de backup (`release/contactos-odoo-backup`):
+- Sincroniza contactos de ManyChat tanto en Azure SQL como en Odoo.
+- Mantiene la lógica de creación y actualización de contactos en Odoo.
+- Incluye workers y endpoints para sincronización bidireccional de contactos.
+- CampaignContact y campañas siguen sincronizándose con Odoo.
+- El worker `odoo_sync_worker.py` está presente y activo.
+- El procesamiento de contactos incluye el campo `odoo_sync_status` y el ID de Odoo.
+- El sistema permite la gestión y consulta de contactos en Odoo desde la API.
+
+---
+
+Para detalles técnicos y ejemplos de payloads, consulta el informe de migración y la documentación interna de esta rama.
+
 Este README fue actualizado para reflejar la arquitectura, endpoints y flujos actuales del proyecto MiaSalud Integration API.
