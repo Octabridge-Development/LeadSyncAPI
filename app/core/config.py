@@ -15,16 +15,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = Field("/api/v1", alias="API_V1_STR")
     PORT: int = Field(8000, alias="PORT")
 
-    # --- Odoo ---
-    # Usar str para URLs si no quieres la validación estricta de HttpUrl en `.env`
-    # Odoo_URL es un buen candidato para HttpUrl, pero puede dar problemas si la URL no es perfecta.
-    # Si quieres que Pydantic valide estrictamente la URL, mantén AnyHttpUrl.
-    # Si prefieres más flexibilidad, cámbialo a str. Aquí lo mantengo como AnyHttpUrl.
-    ODOO_URL: AnyHttpUrl = Field(..., alias="ODOO_URL") 
-    ODOO_DB: str = Field(..., alias="ODOO_DB")
-    ODOO_USERNAME: str = Field(..., alias="ODOO_USERNAME")
-    ODOO_PASSWORD: str = Field(..., alias="ODOO_PASSWORD")
-    ODOO_RATE_LIMIT: float = Field(1.0, alias="ODOO_RATE_LIMIT")
+    # Variables de Odoo eliminadas, solo necesarias en el worker CRM
 
     # --- Azure ---
     AZURE_STORAGE_CONNECTION_STRING: str = Field(..., alias="AZURE_STORAGE_CONNECTION_STRING")

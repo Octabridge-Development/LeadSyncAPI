@@ -68,8 +68,7 @@ class Contact(Base):
     subscription_date = Column(DateTime, nullable=True)
     entry_date = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc)) # default al crear
     initial_state = Column(String(255), nullable=True) # Tu campo VARCHAR en DB
-    odoo_contact_id = Column(String(255), nullable=True)
-    odoo_sync_status = Column(String(50), nullable=False, default="pending")
+    # Eliminados campos odoo_contact_id y odoo_sync_status, ya no se usan para lógica de Odoo
 
     # Claves Foráneas y relaciones
     channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=True)

@@ -16,8 +16,6 @@ class CampaignContactUpdate(BaseModel):
     manychat_id: str = Field(..., description="ID de ManyChat del contacto a buscar")
     # CORRECCIÓN 2A: Añadir especificidad de campaña - campaign_id opcional al esquema 
     campaign_id: Optional[int] = Field(None, description="ID específico de campaña para la asignación a actualizar (opcional). Si no se proporciona, se intentará actualizar el registro de campaña más reciente para el contacto.") # 
-    medical_advisor_id: Optional[int] = Field(None, description="ID del Médico/Asesor de la tabla Advisor")
-    medical_assignment_date: Optional[datetime] = Field(None, description="Fecha y hora de asignación del médico. Si no se proporciona y la columna está vacía, se usará la fecha y hora UTC actuales.")
     last_state: Optional[str] = Field(None, max_length=100, description="Último estado de la campaña-contacto")
     summary: Optional[str] = Field(None, description="Resumen de Conversación")
 
@@ -38,11 +36,9 @@ class CampaignContactRead(BaseModel):
     campaign_id: int
     contact_id: int
     commercial_advisor_id: Optional[int] = None
-    medical_advisor_id: Optional[int] = None
     registration_date: datetime
     commercial_assignment_date: Optional[datetime] = None
     commercial_process_start_date: Optional[datetime] = None
-    medical_assignment_date: Optional[datetime] = None
     medical_process_start_date: Optional[datetime] = None
     medical_process_end_date: Optional[datetime] = None
     quotation_start_date: Optional[datetime] = None

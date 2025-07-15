@@ -10,10 +10,7 @@ services:
       - API_KEY=${API_KEY}
       - DATABASE_URL=${DATABASE_URL} # Debe apuntar a Azure SQL real
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # Azure Storage real
-      - ODOO_URL=${ODOO_URL}
-      - ODOO_DB=${ODOO_DB}
-      - ODOO_USERNAME=${ODOO_USERNAME}
-      - ODOO_PASSWORD=${ODOO_PASSWORD}
+      # Variables de Odoo eliminadas del servicio API, solo necesarias en el worker CRM
     volumes:
       - ./app:/app/app
       - ./workers:/app/workers
@@ -34,10 +31,8 @@ services:
       - API_KEY=${API_KEY}
       - DATABASE_URL=${DATABASE_URL} # Azure SQL real
       - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # Azure Storage real
-      - ODOO_URL=${ODOO_URL}
-      - ODOO_DB=${ODOO_DB}
-      - ODOO_USERNAME=${ODOO_USERNAME}
-      - ODOO_PASSWORD=${ODOO_PASSWORD}
+      # Variables de Odoo eliminadas del servicio workers, solo necesarias en el worker CRM
+  # Worker de CRM (mantiene variables de Odoo para oportunidades)
     volumes:
       - ./app:/app/app
       - ./workers:/app/workers

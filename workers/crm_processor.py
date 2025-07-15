@@ -4,14 +4,14 @@ import logging
 import os
 from app.services.queue_service import QueueService
 from app.services.azure_sql_service import AzureSQLService
-from app.services.odoo_crm_service import OdooCRMService
+## Eliminado import de OdooCRMService, solo lógica de oportunidades y auditoría
 from app.schemas.crm_opportunity import CRMOpportunityEvent, MANYCHAT_TO_ODOO_STAGE_ID
 
 class CRMProcessor:
     def __init__(self):
         self.queue_service = QueueService()
         self.azure_sql_service = AzureSQLService()
-        self.odoo_crm_service = OdooCRMService()
+        # Eliminado: self.odoo_crm_service, solo lógica de oportunidades y auditoría
         self.queue_name = self.queue_service.crm_queue_name
         self.sync_interval = int(os.getenv("SYNC_INTERVAL", 10))
 
@@ -39,8 +39,7 @@ class CRMProcessor:
                 event.stage_odoo_id = stage_id
                 # Registrar en Azure SQL para auditoría
                 await self.azure_sql_service.process_crm_opportunity_event(event)
-                # Crear/actualizar oportunidad en Odoo CRM
-                self.odoo_crm_service.create_or_update_opportunity(event)
+                # Aquí solo se registra la oportunidad en Azure SQL para auditoría. Si se requiere integración con Odoo CRM, debe estar desacoplada y validada.
                 await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
             except Exception as e:
                 logging.error(f"Error en el procesamiento del worker CRM: {e}")

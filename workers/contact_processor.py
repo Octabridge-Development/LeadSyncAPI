@@ -1,21 +1,20 @@
 # workers/contact_processor.py
 """
-Worker de Contactos para ManyChat → Azure SQL/Odoo
---------------------------------------------------
+Worker de Contactos para ManyChat → Azure SQL
+----------------------------------------------
 Procesa eventos de contacto desde la cola 'manychat-contact-queue'.
 
 - Lee mensajes de la cola de Azure Storage.
 - Procesa eventos de contacto de ManyChat.
-- Guarda/actualiza el contacto en Azure SQL y sincroniza con Odoo.
+- Guarda/actualiza el contacto en Azure SQL.
 - Elimina el mensaje de la cola tras procesar.
 
 Este worker implementa el patrón recomendado de desacoplamiento por colas, permitiendo:
-- Controlar la concurrencia hacia Odoo (evitar superar 1 req/s).
 - Reintentos automáticos y tolerancia a fallos.
 - Escalabilidad y resiliencia ante picos de tráfico.
 
 Recomendaciones:
-- Ejecutar solo una instancia de este worker para evitar saturar Odoo.
+- Ejecutar solo una instancia de este worker para evitar duplicados.
 - Monitorear métricas y errores para detectar cuellos de botella.
 - Mantener la lógica idempotente para evitar duplicados en reintentos.
 """
@@ -23,7 +22,7 @@ import asyncio
 import json
 import os
 from app.services.queue_service import QueueService, QueueServiceError
-from app.services.odoo_service import odoo_service
+## Eliminado import de Odoo
 from app.services.azure_sql_service import AzureSQLService
 from app.schemas.manychat import ManyChatContactEvent
 from app.core.logging import logger
@@ -32,7 +31,7 @@ from app.db.models import Contact
 async def process_contact_events(queue_service: QueueService, sql_service: AzureSQLService):
     """
     Worker para procesar eventos de contacto desde la cola.
-    Sincroniza con Odoo tras guardar en SQL y actualiza estado en Azure.
+    Guarda/actualiza el contacto en Azure SQL.
     """
     sync_interval = int(os.getenv("SYNC_INTERVAL", 10))  # segundos entre ciclos
     logger.info(f"Worker de contactos iniciado. Escuchando 'manychat-contact-queue'... Intervalo: {sync_interval}s")
@@ -49,28 +48,7 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 result = await sql_service.process_contact_event(event)
                 logger.info(f"Evento de contacto procesado: {result}")
 
-                # Sincronizar con Odoo (ELIMINADO)
-                # try:
-                #     # Recuperar contacto actualizado de SQL
-                #     contact = None
-                #     with sql_service.__class__.__bases__[0].__globals__["get_db_session"]() as db:
-                #         repo = db.query(type(result["contact_id"])) if "contact_id" in result else None
-                #         contact = db.query(Contact).filter(Contact.id == result["contact_id"]).first() if "contact_id" in result else None
-                #     if contact:
-                #         odoo_id = odoo_service.create_or_update_odoo_contact(contact)
-                #         # Estado: updated si ya existía, success si es nuevo
-                #         if contact.odoo_contact_id and str(contact.odoo_contact_id) == str(odoo_id):
-                #             sql_service.update_odoo_sync_status(contact.manychat_id, "updated", odoo_id)
-                #             logger.info(f"Contacto {contact.id} actualizado en Odoo (odoo_id={odoo_id})")
-                #         else:
-                #             sql_service.update_odoo_sync_status(contact.manychat_id, "success", odoo_id)
-                #             logger.info(f"Contacto {contact.id} creado en Odoo (odoo_id={odoo_id})")
-                #     else:
-                #         logger.warning(f"No se encontró el contacto en SQL para sincronizar con Odoo.")
-                # except Exception as e:
-                #     logger.error(f"Error sincronizando contacto con Odoo: {e}")
-                #     # ...actualizar estado de error...
-                #     pass
+                # ...lógica de sincronización con Odoo eliminada...
                 # Elimina el mensaje de la cola tras procesar
                 await queue_service.delete_message(queue_service.contact_queue_name, message)
                 await asyncio.sleep(sync_interval) # Espera configurable

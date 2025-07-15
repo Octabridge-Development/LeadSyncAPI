@@ -16,57 +16,54 @@ class AzureSQLService:
         self.logger = logging.getLogger(__name__)
 
     async def process_contact_event(self, event: ManyChatContactEvent) -> dict:
-        """Process ManyChat contact event and save to Azure SQL"""
+        """
+        Procesa un evento de contacto recibido desde ManyChat y lo guarda en Azure SQL.
+        - Crea o actualiza el contacto.
+        - Registra el estado inicial en Contact_State.
+        """
         try:
             with get_db_session() as db:
-                # Initialize repositories
                 contact_repo = ContactRepository(db)
                 state_repo = ContactStateRepository(db)
                 channel_repo = ChannelRepository(db)
 
-                # Process channel
                 channel = None
                 if event.canal_entrada:
                     channel = channel_repo.get_or_create_by_name(event.canal_entrada)
 
-                # Prepare contact data for the Contact model
                 contact_data = {
                     "manychat_id": event.manychat_id,
                     "first_name": event.nombre_lead,
                     "last_name": event.apellido_lead,
                     "phone": event.whatsapp,
-                    "email": event.email_lead, # <--- CAMBIO: Mapea el email desde el evento de ManyChat
+                    "email": event.email_lead,
                     "subscription_date": event.datetime_suscripcion,
                     "entry_date": event.datetime_actual,
                     "channel_id": channel.id if channel else None,
                     "initial_state": event.estado_inicial
                 }
-
-                # Upsert contact
                 contact = contact_repo.create_or_update(contact_data)
-
-                # Create contact state (always log new states)
                 state = state_repo.create(
                     contact_id=contact.id,
                     state=event.ultimo_estado,
                     category="manychat"
                 )
-
-                self.logger.info(f"Processed ManyChat event for contact {contact.manychat_id}. Contact ID in DB: {contact.id}")
-
+                self.logger.info(f"Contacto ManyChat procesado y guardado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
                 return {
                     "contact_id": contact.id,
                     "state_id": state.id,
                     "status": "success",
-                    "manychat_id": contact.manychat_id, 
+                    "manychat_id": contact.manychat_id,
                 }
-
         except Exception as e:
-            self.logger.error(f"Error processing ManyChat contact event: {str(e)}", exc_info=True)
+            self.logger.error(f"Error procesando evento de contacto ManyChat: {str(e)}", exc_info=True)
             raise
 
     async def process_campaign_event(self, event: ManyChatCampaignAssignmentEvent) -> dict:
-        """Procesa evento de asignación de campaña"""
+        """
+        Procesa un evento de asignación de campaña desde ManyChat y lo guarda en Azure SQL.
+        - Asocia el contacto con la campaña y asesores.
+        """
         try:
             with get_db_session() as db:
                 contact_repo = ContactRepository(db)
@@ -74,33 +71,28 @@ class AzureSQLService:
                 advisor_repo = AdvisorRepository(db)
                 campaign_contact_repo = CampaignContactRepository(db)
 
-                # 1. Buscar contacto existente por manychat_id
                 contact = contact_repo.get_by_manychat_id(event.manychat_id)
                 if not contact:
-                    self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de campaña. Este evento será omitido.")
+                    self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de campaña.")
                     raise ValueError(f"Contact with manychat_id {event.manychat_id} not found for campaign assignment.")
 
-                # 2. Buscar Campaign por campaign_id (ahora se espera que event.campaign_id sea int)
                 campaign = campaign_repo.get_by_id(event.campaign_id)
                 if not campaign:
                     self.logger.warning(f"Campaña con ID {event.campaign_id} no encontrada para asignación de ManyChat ID {event.manychat_id}.")
                     raise ValueError(f"Campaign with id {event.campaign_id} not found.")
 
-                # 3. Crear/buscar Advisor (comercial_id)
                 commercial_advisor = None
                 if event.comercial_id:
                     commercial_advisor = advisor_repo.get_by_id_or_email(event.comercial_id)
                     if not commercial_advisor:
-                        self.logger.warning(f"Asesor comercial con ID/email {event.comercial_id} no encontrado para campaña {event.campaign_id}. No se asignará asesor comercial.")
+                        self.logger.warning(f"Asesor comercial con ID/email {event.comercial_id} no encontrado para campaña {event.campaign_id}.")
 
-                # Opcional: Crear/buscar Advisor (medico_id)
                 medical_advisor = None
                 if hasattr(event, 'medico_id') and event.medico_id:
                     medical_advisor = advisor_repo.get_by_id_or_email(event.medico_id)
                     if not medical_advisor:
-                        self.logger.warning(f"Asesor médico con ID/email {event.medico_id} no encontrado para campaña {event.campaign_id}. No se asignará asesor médico.")
+                        self.logger.warning(f"Asesor médico con ID/email {event.medico_id} no encontrado para campaña {event.campaign_id}.")
 
-                # 4. Crear/actualizar Campaign_Contact
                 campaign_contact_data = {
                     "contact_id": contact.id,
                     "campaign_id": campaign.id,
@@ -108,20 +100,16 @@ class AzureSQLService:
                     "medical_advisor_id": medical_advisor.id if medical_advisor else None,
                     "registration_date": event.datetime_actual,
                     "last_state": event.ultimo_estado,
-                    "lead_state": event.tipo_asignacion # Asumiendo que 'tipo_asignacion' se mapea a 'lead_state'
+                    "lead_state": event.tipo_asignacion
                 }
-                # Incluir summary si viene en el evento
                 if hasattr(event, "summary") and event.summary is not None:
                     campaign_contact_data["summary"] = event.summary
                 campaign_contact = campaign_contact_repo.create_or_update_assignment(campaign_contact_data)
-
-                self.logger.info(f"Evento de campaña procesado exitosamente para contacto {contact.manychat_id}, campaña {campaign.name}. CampaignContact ID: {campaign_contact.id}")
-
+                self.logger.info(f"Evento de campaña procesado y guardado en Azure SQL. Contact ID: {contact.id}, CampaignContact ID: {campaign_contact.id}")
                 return {
                     "campaign_contact_id": campaign_contact.id,
                     "status": "success"
                 }
-
         except Exception as e:
             self.logger.error(f"Error procesando evento de campaña: {str(e)}", exc_info=True)
             raise
@@ -130,33 +118,26 @@ class AzureSQLService:
     async def process_crm_lead_event(self, event: CRMLeadEvent) -> dict:
         """
         Procesa un evento de CRM para tracking en Azure SQL.
-        Esta función será llamada por el worker de CRM antes de sincronizar con Odoo.
+        - Registra el estado del lead en Contact_State con categoría 'crm'.
         """
-        self.logger.info(f"Procesando evento de tracking CRM para manychat_id: {event.manychat_id}")
         try:
             with get_db_session() as db:
                 contact_repo = ContactRepository(db)
                 state_repo = ContactStateRepository(db)
 
-                # 1. Busca el contacto para asociar el estado
                 contact = contact_repo.get_by_manychat_id(event.manychat_id)
                 if not contact:
-                    # Idealmente, el contacto ya debería existir por un evento anterior.
-                    # Podrías decidir crearlo aquí si no existe.
-                    self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de CRM. Se omitirá el tracking de estado.")
+                    self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de CRM.")
                     raise ValueError(f"Contact not found for CRM event tracking: {event.manychat_id}")
 
-                # 2. Reutiliza la lógica para crear un nuevo estado, pero con categoría "crm"
                 state_summary = f"Stage {event.state.stage_id}: {event.state.summary or 'Update'}"
                 state = state_repo.create(
                     contact_id=contact.id,
-                    state=state_summary, # Guardamos un resumen del estado del lead
-                    category="crm" # Categoría para diferenciarlo de otros estados
+                    state=state_summary,
+                    category="crm"
                 )
-
                 self.logger.info(f"Evento de CRM registrado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
                 return {"status": "success", "contact_id": contact.id, "state_id": state.id}
-
         except Exception as e:
             self.logger.error(f"Error procesando evento de tracking CRM: {str(e)}", exc_info=True)
             raise
@@ -164,15 +145,15 @@ class AzureSQLService:
     async def process_crm_opportunity_event(self, event: CRMOpportunityEvent) -> dict:
         """
         Procesa un evento de oportunidad CRM para tracking en Azure SQL.
+        - Registra el estado de la oportunidad en Contact_State con categoría 'crm'.
         """
-        logging.info(f"Procesando evento de oportunidad CRM para manychat_id: {event.manychat_id}")
         try:
             with get_db_session() as db:
                 contact_repo = ContactRepository(db)
                 state_repo = ContactStateRepository(db)
                 contact = contact_repo.get_by_manychat_id(event.manychat_id)
                 if not contact:
-                    logging.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de CRM. Se omitirá el tracking de estado.")
+                    self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de oportunidad CRM.")
                     raise ValueError(f"Contact not found for CRM opportunity event: {event.manychat_id}")
                 state_summary = f"Stage {event.stage_odoo_id}: {event.stage_manychat}"
                 state = state_repo.create(
@@ -180,15 +161,11 @@ class AzureSQLService:
                     state=state_summary,
                     category="crm"
                 )
-                logging.info(f"Evento de oportunidad CRM registrado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
+                self.logger.info(f"Evento de oportunidad CRM registrado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
                 return {"status": "success", "contact_id": contact.id, "state_id": state.id}
         except Exception as e:
-            logging.error(f"Error procesando evento de oportunidad CRM: {str(e)}")
+            self.logger.error(f"Error procesando evento de oportunidad CRM: {str(e)}", exc_info=True)
             raise
     # --- [FIN DEL BLOQUE AÑADIDO] ---
 
-    def update_odoo_sync_status(self, manychat_id: str, status: str, odoo_contact_id: Optional[str] = None) -> Optional[Contact]:
-        """
-        (ELIMINADO) Actualiza el estado de sincronización y el odoo_contact_id en un contacto de Azure SQL.
-        """
-        pass
+    # Método de sincronización con Odoo eliminado. Solo lógica de Azure SQL para contactos.
