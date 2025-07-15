@@ -1,4 +1,5 @@
 from app.services.odoo_service import odoo_service
+from app.schemas.crm_opportunity import CRMOpportunityEvent
 
 # app/services/odoo_crm_service.py
 
@@ -70,6 +71,24 @@ class OdooCRMService:
             new_lead_id = odoo_service.execute('crm.lead', 'create', prepared_values)
             print(f"Creando nuevo lead en Odoo en stage_id {stage_id}.")
             return {"status": "created", "odoo_id": new_lead_id, "stage_id": stage_id}
+
+    def create_or_update_opportunity(self, event: CRMOpportunityEvent):
+        """
+        Crea o actualiza una oportunidad en Odoo CRM usando el nombre del contacto y el stage_id mapeado.
+        """
+        vals = {
+            "name": event.manychat_id,  # Usar manychat_id como nombre de la oportunidad
+            "stage_id": event.stage_odoo_id,
+            "x_studio_manychatid_crm": event.manychat_id,
+            "advisor_id": event.advisor_id,
+            "date_stage_change": event.datetime_stage_change.isoformat()
+        }
+        # Aquí se llama al método de Odoo para crear/actualizar la oportunidad
+        odoo_service.execute("crm.lead", "create", [vals])
+        # Si necesitas actualizar, puedes buscar primero y luego actualizar
+        # lead_id = odoo_service.execute("crm.lead", "search", [["x_studio_manychatid_crm", "=", event.manychat_id]])
+        # if lead_id:
+        #     odoo_service.execute("crm.lead", "write", [lead_id, vals])
 
 # Instancia del servicio para ser usada por otros módulos
 odoo_crm_service = OdooCRMService()

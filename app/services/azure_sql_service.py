@@ -6,6 +6,7 @@ from app.db.repositories import (
 # [AÑADIDO] Importa el schema de CRM para el type hinting
 from app.schemas.crm import CRMLeadEvent
 from app.schemas.manychat import ManyChatContactEvent, ManyChatCampaignAssignmentEvent 
+from app.schemas.crm_opportunity import CRMOpportunityEvent
 from app.db.models import Contact # Importa el modelo Contact, que tiene odoo_contact_id y odoo_sync_status
 from typing import Optional
 import logging
@@ -58,8 +59,6 @@ class AzureSQLService:
                     "state_id": state.id,
                     "status": "success",
                     "manychat_id": contact.manychat_id, 
-                    "odoo_contact_id": contact.odoo_contact_id, # Retorna el ID de Odoo si ya lo tenía
-                    "odoo_sync_status": contact.odoo_sync_status # Retorna el estado de sincronización
                 }
 
         except Exception as e:
@@ -161,13 +160,35 @@ class AzureSQLService:
         except Exception as e:
             self.logger.error(f"Error procesando evento de tracking CRM: {str(e)}", exc_info=True)
             raise
+
+    async def process_crm_opportunity_event(self, event: CRMOpportunityEvent) -> dict:
+        """
+        Procesa un evento de oportunidad CRM para tracking en Azure SQL.
+        """
+        logging.info(f"Procesando evento de oportunidad CRM para manychat_id: {event.manychat_id}")
+        try:
+            with get_db_session() as db:
+                contact_repo = ContactRepository(db)
+                state_repo = ContactStateRepository(db)
+                contact = contact_repo.get_by_manychat_id(event.manychat_id)
+                if not contact:
+                    logging.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de CRM. Se omitirá el tracking de estado.")
+                    raise ValueError(f"Contact not found for CRM opportunity event: {event.manychat_id}")
+                state_summary = f"Stage {event.stage_odoo_id}: {event.stage_manychat}"
+                state = state_repo.create(
+                    contact_id=contact.id,
+                    state=state_summary,
+                    category="crm"
+                )
+                logging.info(f"Evento de oportunidad CRM registrado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
+                return {"status": "success", "contact_id": contact.id, "state_id": state.id}
+        except Exception as e:
+            logging.error(f"Error procesando evento de oportunidad CRM: {str(e)}")
+            raise
     # --- [FIN DEL BLOQUE AÑADIDO] ---
 
     def update_odoo_sync_status(self, manychat_id: str, status: str, odoo_contact_id: Optional[str] = None) -> Optional[Contact]:
         """
-        Actualiza el estado de sincronización y el odoo_contact_id en un contacto de Azure SQL.
-        Utiliza el ContactRepository.
+        (ELIMINADO) Actualiza el estado de sincronización y el odoo_contact_id en un contacto de Azure SQL.
         """
-        with get_db_session() as db:
-            contact_repo = ContactRepository(db)
-            return contact_repo.update_odoo_sync_status(manychat_id, status, odoo_contact_id)
+        pass

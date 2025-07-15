@@ -49,33 +49,30 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 result = await sql_service.process_contact_event(event)
                 logger.info(f"Evento de contacto procesado: {result}")
 
-                # Sincronizar con Odoo
-                try:
-                    # Recuperar contacto actualizado de SQL
-                    contact = None
-                    with sql_service.__class__.__bases__[0].__globals__["get_db_session"]() as db:
-                        repo = db.query(type(result["contact_id"])) if "contact_id" in result else None
-                        contact = db.query(Contact).filter(Contact.id == result["contact_id"]).first() if "contact_id" in result else None
-                    if contact:
-                        odoo_id = odoo_service.create_or_update_odoo_contact(contact)
-                        # Estado: updated si ya existía, success si es nuevo
-                        if contact.odoo_contact_id and str(contact.odoo_contact_id) == str(odoo_id):
-                            sql_service.update_odoo_sync_status(contact.manychat_id, "updated", odoo_id)
-                            logger.info(f"Contacto {contact.id} actualizado en Odoo (odoo_id={odoo_id})")
-                        else:
-                            sql_service.update_odoo_sync_status(contact.manychat_id, "success", odoo_id)
-                            logger.info(f"Contacto {contact.id} creado en Odoo (odoo_id={odoo_id})")
-                    else:
-                        logger.warning(f"No se encontró el contacto en SQL para sincronizar con Odoo.")
-                except Exception as sync_e:
-                    sql_service.update_odoo_sync_status(event.manychat_id, "error")
-                    logger.error(f"Error al sincronizar contacto con Odoo: {sync_e}")
-
-                await queue_service.delete_message(
-                    queue_name=queue_service.contact_queue_name, 
-                    message_id=message.id, 
-                    pop_receipt=message.pop_receipt
-                )
+                # Sincronizar con Odoo (ELIMINADO)
+                # try:
+                #     # Recuperar contacto actualizado de SQL
+                #     contact = None
+                #     with sql_service.__class__.__bases__[0].__globals__["get_db_session"]() as db:
+                #         repo = db.query(type(result["contact_id"])) if "contact_id" in result else None
+                #         contact = db.query(Contact).filter(Contact.id == result["contact_id"]).first() if "contact_id" in result else None
+                #     if contact:
+                #         odoo_id = odoo_service.create_or_update_odoo_contact(contact)
+                #         # Estado: updated si ya existía, success si es nuevo
+                #         if contact.odoo_contact_id and str(contact.odoo_contact_id) == str(odoo_id):
+                #             sql_service.update_odoo_sync_status(contact.manychat_id, "updated", odoo_id)
+                #             logger.info(f"Contacto {contact.id} actualizado en Odoo (odoo_id={odoo_id})")
+                #         else:
+                #             sql_service.update_odoo_sync_status(contact.manychat_id, "success", odoo_id)
+                #             logger.info(f"Contacto {contact.id} creado en Odoo (odoo_id={odoo_id})")
+                #     else:
+                #         logger.warning(f"No se encontró el contacto en SQL para sincronizar con Odoo.")
+                # except Exception as e:
+                #     logger.error(f"Error sincronizando contacto con Odoo: {e}")
+                #     # ...actualizar estado de error...
+                #     pass
+                # Elimina el mensaje de la cola tras procesar
+                await queue_service.delete_message(queue_service.contact_queue_name, message)
                 await asyncio.sleep(sync_interval) # Espera configurable
             else:
                 logger.info(f"No hay mensajes en la cola de contactos. Esperando {sync_interval} segundos...")
