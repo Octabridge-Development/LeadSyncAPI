@@ -7,7 +7,7 @@ from datetime import datetime
 
 # Asume que tendrás un servicio de colas y un mapeo de stages.
 # Reemplaza 'your_queue_service' con el nombre real de tu módulo de servicio de colas.
-from app.services.your_queue_service import QueueService # <-- Asegúrate de que esta importación sea correcta para tu QueueService
+from app.services.queue_service import QueueService # <-- Importación corregida del servicio de colas
 from app.schemas.crm_opportunity import CRMOpportunityEvent # <-- Esta importación es la del esquema que acabas de revisar
 
 router = APIRouter()
