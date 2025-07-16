@@ -9,7 +9,7 @@ class AdvisorBase(BaseModel):
     role: Optional[str] = Field(None, max_length=50, description="Rol del asesor (ej. Comercial, Médico)")
     status: Optional[str] = Field(None, max_length=20, description="Estado del asesor (ej. Activo, Inactivo)")
     genre: Optional[str] = Field(None, max_length=25, description="Género del asesor")
-    odoo_id: Optional[str] = Field(None, max_length=50, description="ID del asesor en Odoo")
+    # Eliminado campo odoo_id, ya no se usa para lógica de Odoo
 
 # Esquema para crear un Asesor
 class AdvisorCreate(AdvisorBase):

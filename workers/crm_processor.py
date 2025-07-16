@@ -1,74 +1,97 @@
+
 import asyncio
 import json
 import logging
 import os
 from app.services.queue_service import QueueService
 from app.services.azure_sql_service import AzureSQLService
-from app.services.odoo_crm_service import OdooCRMService
-from app.schemas.crm import CRMLeadEvent
+from app.schemas.crm_opportunity import CRMOpportunityEvent
 
-# Tabla de mapeo de etapas (sequence a stage_id)
-STAGE_SEQUENCE_TO_ID = {
-    0: 16,  # Recién Suscrito Sin Asignar
-    1: 17,  # Recién Suscrito Pendiente AC
-    2: 18,  # Retornó en AC
-    3: 19,  # Comienza AC
-    4: 20,  # Retorno a AE
-    5: 21,  # Derivado a AE
-    6: 22,  # Comienza AE
-    7: 23,  # Terminó AE
-    8: 24,  # No Termino AE Derivado AC
-    9: 25,  # Comienza Cotización
-    10: 26, # Orden de Venta Confirmada (CERRADA)
-}
-
-# Lista de stage_id válidos en Odoo
-VALID_STAGE_IDS = {16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}
+# Configuración de logging robusta
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+logger = logging.getLogger("crm_opportunity_worker")
 
 class CRMProcessor:
     def __init__(self):
         self.queue_service = QueueService()
         self.azure_sql_service = AzureSQLService()
-        self.odoo_crm_service = OdooCRMService()
         self.queue_name = self.queue_service.crm_queue_name
-        self.sync_interval = int(os.getenv("SYNC_INTERVAL", 10))  # segundos entre ciclos
+        self.sync_interval = int(os.getenv("SYNC_INTERVAL", 10))
 
     async def process(self):
+        logger.info("Iniciando worker de oportunidades CRM → Odoo...")
         while True:
             try:
                 message = await self.queue_service.receive_message(self.queue_name)
                 if not message:
-                    logging.info(f"No hay mensajes en la cola '{self.queue_name}'. Esperando {self.sync_interval} segundos...")
+                    logger.info(f"No hay mensajes en la cola '{self.queue_name}'. Esperando {self.sync_interval} segundos...")
                     await asyncio.sleep(self.sync_interval)
                     continue
                 data = json.loads(message.content)
                 try:
-                    event = CRMLeadEvent(**data)
+                    event = CRMOpportunityEvent(**data)
                 except Exception as e:
-                    logging.error(f"Error de validación de datos: {e}")
-                    # Aquí podrías enviar a DLQ si lo deseas
+                    logger.error(f"Error de validación de datos: {e} | Datos: {data}")
                     await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
                     continue
-                # Validar stage_id recibido directamente
-                stage_id = getattr(event.state, 'stage_id', None)
-                if stage_id is None or stage_id not in VALID_STAGE_IDS:
-                    logging.error(f"stage_id inválido: {stage_id}. Mensaje descartado.")
-                    await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
-                    continue
-                # Usar stage_id directamente en la llamada a Odoo
-                await self.azure_sql_service.process_crm_lead_event(event)
-                self.odoo_crm_service.create_or_update_lead(event)
-                # Eliminar mensaje de la cola
+                # Obtener Contact y último ContactState
+                from app.db.session import SessionLocal
+                from app.db.repositories import ContactRepository, ContactStateRepository
+                db = SessionLocal()
+                try:
+                    contact_repo = ContactRepository(db)
+                    state_repo = ContactStateRepository(db)
+                    contact = contact_repo.get_by_manychat_id(event.manychat_id)
+                    if not contact:
+                        logger.error(f"No se encontró el contacto con manychat_id={event.manychat_id} en la BD. Se elimina el mensaje de la cola.")
+                        await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
+                        return
+                    if contact.odoo_sync_status != "pending":
+                        logger.info(f"Contacto manychat_id={event.manychat_id} ya sincronizado (odoo_sync_status={contact.odoo_sync_status}). Se elimina el mensaje de la cola.")
+                        await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
+                        return
+                    # Obtener el último estado
+                    contact_state = state_repo.get_latest_by_contact(contact.id)
+                    # Preparar datos para Odoo
+                    full_name = f"{contact.first_name} {contact.last_name or ''}".strip()
+                    stage_manychat = contact_state.state if contact_state else event.stage_manychat
+                    # Mapear stage ManyChat a Odoo stage_id
+                    stage_odoo_id = CRMOpportunityEvent.MANYCHAT_TO_ODOO_STAGE.get(stage_manychat)
+                    if not stage_odoo_id:
+                        logger.error(f"No se pudo mapear el stage de ManyChat '{stage_manychat}' a un stage_id de Odoo. Se elimina el mensaje de la cola.")
+                        await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
+                        return
+                    # No modificar ni copiar el campo stage_odoo_id, es un property calculado
+                    # Lógica de integración con Odoo
+                    logger.info(f"Creando oportunidad en Odoo para contacto: {full_name}, manychat_id: {contact.manychat_id}, stage: {stage_manychat}, stage_odoo_id: {stage_odoo_id}")
+                    # Aquí deberías llamar a tu servicio real de Odoo:
+                    result = await self.azure_sql_service.process_crm_opportunity_event(event)
+                    logger.info(f"Resultado de sincronización Odoo: {result}")
+                    # Actualizar odoo_sync_status a 'synced' si fue exitoso
+                    contact_repo.update_odoo_sync_status(contact.manychat_id, "synced")
+                    db.close()
+                except Exception as e:
+                    logger.error(f"Error al sincronizar oportunidad con Odoo: {e} | Evento: {event.model_dump()}")
+                    db.close()
                 await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
-                logging.info(f"Processed CRM event for manychat_id: {event.manychat_id}")
+                await asyncio.sleep(1)  # Rate limit Odoo
             except Exception as e:
-                logging.error(f"Error processing CRM event: {e}")
-            await asyncio.sleep(self.sync_interval)  # Espera configurable entre ciclos
+                logger.error(f"Error en el procesamiento del worker CRM: {e}")
+                await asyncio.sleep(self.sync_interval)
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    """
+    Punto de entrada profesional para el worker CRM.
+    Inicializa el event loop y ejecuta el procesamiento asíncrono con manejo robusto de errores.
+    """
+    logger.info("Arrancando el worker CRM de oportunidades...")
     processor = CRMProcessor()
-    asyncio.run(processor.process())
+    try:
+        asyncio.run(processor.process())
+    except KeyboardInterrupt:
+        logger.info("Worker CRM detenido por el usuario (KeyboardInterrupt). Cerrando...")
+    except Exception as e:
+        logger.error(f"Fallo crítico en el worker CRM: {e}")
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,7 @@ from typing import Annotated
 
 from app.schemas.crm import CRMLeadEvent, CRMLeadResponse # Importamos los esquemas que creaste
 from app.services.queue_service import queue_service # Importamos el servicio de colas de Felipe
-from app.services.odoo_crm_service import odoo_crm_service # Para el endpoint de consulta
+## Import eliminado: odoo_crm_service ya no existe
 
 # Router específico para CRM
 router = APIRouter(
@@ -58,8 +58,8 @@ async def get_lead(manychat_id: str, api_key: str = Depends(verify_api_key)):
     """
     Consulta la información de un lead directamente en Odoo. (Ejemplo de uso)
     """
-    # Esta es una función de ejemplo, la lógica real estaría en odoo_crm_service
-    lead_info = odoo_crm_service.get_lead_by_manychat_id(manychat_id)
+    # Esta es una función de ejemplo, la lógica real de Odoo fue eliminada
+    lead_info = None
     if not lead_info:
         raise HTTPException(status_code=404, detail="Lead not found")
     return lead_info

@@ -73,17 +73,29 @@ class ContactStateRepository:
     def __init__(self, db: Session):
         self.db = db
         
-    def create(self, contact_id: int, state: str, category: str = "manychat") -> ContactState:
-        """Crea un nuevo registro de estado de contacto."""
-        contact_state = ContactState(
-            contact_id=contact_id,
-            state=state,
-            category=category
-        )
-        self.db.add(contact_state)
-        self.db.commit()
-        self.db.refresh(contact_state)
-        return contact_state
+
+    def create_or_update(self, contact_id: int, state: str, category: str = "manychat") -> ContactState:
+        """
+        Crea o actualiza el estado del contacto: si existe un registro previo, lo actualiza; si no, lo crea.
+        Siempre habrá solo un registro por contacto.
+        """
+        latest = self.get_latest_by_contact(contact_id)
+        if latest:
+            latest.state = state
+            latest.category = category
+            self.db.commit()
+            self.db.refresh(latest)
+            return latest
+        else:
+            contact_state = ContactState(
+                contact_id=contact_id,
+                state=state,
+                category=category
+            )
+            self.db.add(contact_state)
+            self.db.commit()
+            self.db.refresh(contact_state)
+            return contact_state
         
     def get_latest_by_contact(self, contact_id: int) -> Optional[ContactState]:
         """Obtiene el último estado registrado para un contacto."""
