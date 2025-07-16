@@ -25,6 +25,20 @@ class OdooServiceError(Exception):
     before_sleep=before_sleep_log(logger, logger.warning)
 )
 class OdooCRMOpportunityService:
+    async def get_opportunity_by_id(self, opportunity_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Obtiene una oportunidad por su ID en Odoo y muestra todos los campos relevantes, incluyendo el ManyChatID.
+        """
+        fields = ['id', 'name', 'stage_id', 'x_studio_manychatid_api', 'user_id', 'partner_id']
+        try:
+            result = await self._execute_odoo_call(
+                'crm.lead', 'read', [opportunity_id], fields=fields
+            )
+            logger.info(f"Oportunidad Odoo por ID {opportunity_id}: {result}")
+            return result[0] if result else None
+        except Exception as e:
+            logger.error(f"Error al obtener oportunidad Odoo por ID {opportunity_id}: {e}")
+            return None
     def __init__(self):
         settings = get_settings()
         self.url = settings.ODOO_URL
@@ -110,14 +124,15 @@ class OdooCRMOpportunityService:
         # o que el external_id se usa de alguna forma.
         # En Odoo, esto se gestiona comúnmente con un campo custom x_manychat_id o similar.
         # Si no existe, tendrás que crearlo en Odoo en el modelo crm.lead.
-        domain = [('x_studio_manychatid_crm', '=', manychat_id)] # Usar el nombre real del campo en Odoo
-        fields = ['id', 'name', 'stage_id', 'x_studio_manychatid_crm', 'user_id', 'partner_id'] # Campos a obtener
-        
+        domain = [('x_studio_manychatid_api', '=', manychat_id)] # Usar el nombre real del campo en Odoo
+        fields = ['id', 'name', 'stage_id', 'x_studio_manychatid_api', 'user_id', 'partner_id'] # Campos a obtener
+
         try:
             # Buscar una oportunidad. Limitamos a 1 ya que manychat_id debería ser único.
             opportunities = await self._execute_odoo_call(
-                'crm.lead', 'search_read', domain, {'fields': fields, 'limit': 1}
+                'crm.lead', 'search_read', domain, fields=fields, limit=1
             )
+            logger.info(f"Resultado crudo de búsqueda Odoo por ManyChatID {manychat_id}: {opportunities}")
             if opportunities:
                 logger.info(f"Oportunidad Odoo encontrada para ManyChat ID {manychat_id}: {opportunities[0]['id']}")
                 return opportunities[0]
@@ -155,7 +170,7 @@ class OdooCRMOpportunityService:
         opportunity_data = {
             'name': opportunity_name,
             'stage_id': stage_odoo_id,
-            'x_manychat_id': manychat_id, # Campo personalizado
+            'x_studio_manychatid_api': manychat_id, # Campo personalizado correcto
             'type': 'opportunity', # Asegura que es una oportunidad, no un lead genérico
             # Si se requiere, mapear datos de contacto al partner_id o a los campos de lead
             'contact_name': contact_name,
@@ -163,8 +178,7 @@ class OdooCRMOpportunityService:
             'phone': contact_phone,
         }
 
-        if advisor_odoo_id:
-            opportunity_data['user_id'] = advisor_odoo_id # Asignar al asesor
+        # No asignar user_id/advisor
 
         # Asume un 'Source' para ManyChat si tienes uno configurado en Odoo
         # Puedes buscar el ID de la fuente 'ManyChat' si es necesario
@@ -180,6 +194,8 @@ class OdooCRMOpportunityService:
                     'crm.lead', 'write', [opportunity_id], opportunity_data
                 )
                 logger.info(f"Oportunidad Odoo {opportunity_id} actualizada correctamente.")
+                # Log de la oportunidad después de actualizar
+                await self.get_opportunity_by_id(opportunity_id)
                 return opportunity_id
             except OdooServiceError as e:
                 logger.error(f"Error al actualizar oportunidad Odoo {opportunity_id}: {e}")
@@ -187,6 +203,7 @@ class OdooCRMOpportunityService:
         else:
             # Crear nueva oportunidad
             logger.info(f"Creando nueva oportunidad Odoo para ManyChat ID: {manychat_id}")
+            logger.info(f"Payload enviado a Odoo (crm.lead.create): {opportunity_data}")
             try:
                 new_opportunity_id = await self._execute_odoo_call(
                     'crm.lead', 'create', opportunity_data
@@ -194,6 +211,18 @@ class OdooCRMOpportunityService:
                 if not new_opportunity_id:
                     raise OdooServiceError(f"Odoo no devolvió ID al crear oportunidad para ManyChat ID {manychat_id}.")
                 logger.info(f"Nueva oportunidad Odoo creada con ID: {new_opportunity_id} para ManyChat ID: {manychat_id}")
+                # Log de la oportunidad recién creada
+                await self.get_opportunity_by_id(new_opportunity_id)
+                # Forzar update del campo ManyChatID tras la creación (workaround)
+                try:
+                    await self._execute_odoo_call(
+                        'crm.lead', 'write', [new_opportunity_id], {'x_studio_manychatid_api': manychat_id}
+                    )
+                    logger.info(f"Campo ManyChatID actualizado por workaround en Odoo ID: {new_opportunity_id}")
+                    # Log de la oportunidad después del workaround
+                    await self.get_opportunity_by_id(new_opportunity_id)
+                except Exception as e:
+                    logger.warning(f"No se pudo forzar el update del campo ManyChatID en Odoo ID: {new_opportunity_id}: {e}")
                 return new_opportunity_id
             except OdooServiceError as e:
                 logger.error(f"Error al crear nueva oportunidad Odoo para ManyChat ID {manychat_id}: {e}")
@@ -227,5 +256,18 @@ class OdooCRMOpportunityService:
             logger.error(f"Error al actualizar stage de oportunidad Odoo {opportunity_id}: {e}")
             raise
 
-# Instancia global para ser inyectada en FastAPI
-odoo_crm_opportunity_service = OdooCRMOpportunityService()
+
+# Instancia global solo si Odoo está configurado correctamente
+def get_odoo_crm_opportunity_service():
+    try:
+        return OdooCRMOpportunityService()
+    except RuntimeError as e:
+        logger.warning(f"OdooCRMOpportunityService no inicializado: {e}")
+        return None
+
+# Instancia global para importación directa
+try:
+    odoo_crm_opportunity_service = OdooCRMOpportunityService()
+except RuntimeError as e:
+    logger.warning(f"OdooCRMOpportunityService no inicializado: {e}")
+    odoo_crm_opportunity_service = None

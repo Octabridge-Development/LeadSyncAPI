@@ -6,6 +6,8 @@ from datetime import datetime
 
 
 class CRMOpportunityEvent(BaseModel):
+    class Config:
+        extra = "allow"
     manychat_id: str = Field(..., description="ID del contacto de ManyChat") # [cite: 50]
     stage_manychat: str = Field(..., description="Stage de ManyChat") # [cite: 52]
     advisor_id: Optional[str] = Field(None, description="ID del asesor (opcional)") # [cite: 55]

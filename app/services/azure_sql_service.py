@@ -149,7 +149,6 @@ class AzureSQLService:
         - Actualiza el campo initial_state del contacto
         - Traduce el stage ManyChat a ID Odoo y crea/actualiza la oportunidad en Odoo
         """
-        from app.services.odoo_crm_opportunity_service import odoo_crm_opportunity_service
         try:
             with get_db_session() as db:
                 contact_repo = ContactRepository(db)
@@ -188,6 +187,7 @@ class AzureSQLService:
 
                 # Llamar a Odoo para crear/actualizar la oportunidad
                 try:
+                    from app.services.odoo_crm_opportunity_service import odoo_crm_opportunity_service
                     odoo_id = await odoo_crm_opportunity_service.create_or_update_opportunity(
                         manychat_id=event.manychat_id,
                         opportunity_name=opportunity_name,

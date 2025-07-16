@@ -55,8 +55,15 @@ class CRMProcessor:
                     # Preparar datos para Odoo
                     full_name = f"{contact.first_name} {contact.last_name or ''}".strip()
                     stage_manychat = contact_state.state if contact_state else event.stage_manychat
+                    # Mapear stage ManyChat a Odoo stage_id
+                    stage_odoo_id = CRMOpportunityEvent.MANYCHAT_TO_ODOO_STAGE.get(stage_manychat)
+                    if not stage_odoo_id:
+                        logger.error(f"No se pudo mapear el stage de ManyChat '{stage_manychat}' a un stage_id de Odoo. Se elimina el mensaje de la cola.")
+                        await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
+                        return
+                    # No modificar ni copiar el campo stage_odoo_id, es un property calculado
                     # Lógica de integración con Odoo
-                    logger.info(f"Creando oportunidad en Odoo para contacto: {full_name}, manychat_id: {contact.manychat_id}, stage: {stage_manychat}")
+                    logger.info(f"Creando oportunidad en Odoo para contacto: {full_name}, manychat_id: {contact.manychat_id}, stage: {stage_manychat}, stage_odoo_id: {stage_odoo_id}")
                     # Aquí deberías llamar a tu servicio real de Odoo:
                     result = await self.azure_sql_service.process_crm_opportunity_event(event)
                     logger.info(f"Resultado de sincronización Odoo: {result}")
@@ -64,7 +71,7 @@ class CRMProcessor:
                     contact_repo.update_odoo_sync_status(contact.manychat_id, "synced")
                     db.close()
                 except Exception as e:
-                    logger.error(f"Error al sincronizar oportunidad con Odoo: {e} | Evento: {event.dict()}")
+                    logger.error(f"Error al sincronizar oportunidad con Odoo: {e} | Evento: {event.model_dump()}")
                     db.close()
                 await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
                 await asyncio.sleep(1)  # Rate limit Odoo
