@@ -15,7 +15,6 @@ class Settings(BaseSettings):
     API_V1_STR: str = Field("/api/v1", alias="API_V1_STR")
     PORT: int = Field(8000, alias="PORT")
 
-    # Variables de Odoo eliminadas, solo necesarias en el worker CRM
 
     # --- Azure ---
     AZURE_STORAGE_CONNECTION_STRING: str = Field(..., alias="AZURE_STORAGE_CONNECTION_STRING")
@@ -28,6 +27,12 @@ class Settings(BaseSettings):
     LOG_FORMAT: str = Field("json", alias="LOG_FORMAT")
     APPINSIGHTS_INSTRUMENTATION_KEY: Optional[str] = Field(None, alias="APPINSIGHTS_INSTRUMENTATION_KEY")
     
+    # --- Odoo ---
+    ODOO_URL: Optional[str] = Field(None, alias="ODOO_URL")
+    ODOO_DB: Optional[str] = Field(None, alias="ODOO_DB")
+    ODOO_USERNAME: Optional[str] = Field(None, alias="ODOO_USERNAME")
+    ODOO_PASSWORD: Optional[str] = Field(None, alias="ODOO_PASSWORD")
+
     # --- CAMBIO CLAVE AQUÍ: Usar model_config para Pydantic v2 ---
     model_config = SettingsConfigDict(
         env_file=os.getenv("ENV_FILE", ".env"), # Lee el archivo .env especificado por ENV_FILE o por defecto .env
@@ -57,7 +62,6 @@ class Settings(BaseSettings):
                 # Usar setattr para asignar directamente a los campos de la instancia
                 # Los nombres de los secretos en Key Vault deben coincidir con estos (ej. "API-KEY")
                 self.API_KEY = client.get_secret("API-KEY").value
-                self.ODOO_PASSWORD = client.get_secret("ODOO-PASSWORD").value
                 self.AZURE_STORAGE_CONNECTION_STRING = client.get_secret("AZURE-STORAGE-CONNECTION-STRING").value
                 self.DATABASE_URL = client.get_secret("DATABASE-URL").value
                 

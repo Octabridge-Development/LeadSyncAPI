@@ -19,6 +19,7 @@ def datetime_handler(obj: Any) -> str:
     raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
 
 class QueueService:
+    CRM_OPPORTUNITIES_QUEUE_NAME = "manychat-crm-opportunities-queue"
     """
     Servicio completo y robusto para interactuar de forma asíncrona con Azure Storage Queue.
     Implementa reintentos, DLQ, y no duplica código.

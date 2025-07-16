@@ -31,11 +31,24 @@ class OdooCRMOpportunityService:
         self.db = settings.ODOO_DB
         self.username = settings.ODOO_USERNAME
         self.password = settings.ODOO_PASSWORD
-        
+
+        # Validar que las credenciales Odoo estén presentes
+        missing = []
+        if not self.url:
+            missing.append("ODOO_URL")
+        if not self.db:
+            missing.append("ODOO_DB")
+        if not self.username:
+            missing.append("ODOO_USERNAME")
+        if not self.password:
+            missing.append("ODOO_PASSWORD")
+        if missing:
+            raise RuntimeError(f"Faltan variables de entorno Odoo requeridas: {', '.join(missing)}. Este servicio solo debe usarse si la integración Odoo está configurada.")
+
         # Conexión XML-RPC para autenticación y llamadas comunes
         self.common = xmlrpc.client.ServerProxy(f'{self.url}/xmlrpc/2/common')
         self.uid: Optional[int] = None # User ID, se obtiene en la autenticación
-        
+
         # Conexión para operaciones de modelos (lectura/escritura)
         self.models: Optional[xmlrpc.client.ServerProxy] = None # Se inicializa después de la autenticación
 
@@ -97,8 +110,8 @@ class OdooCRMOpportunityService:
         # o que el external_id se usa de alguna forma.
         # En Odoo, esto se gestiona comúnmente con un campo custom x_manychat_id o similar.
         # Si no existe, tendrás que crearlo en Odoo en el modelo crm.lead.
-        domain = [('x_manychat_id', '=', manychat_id)] # Asume 'x_manychat_id' es el campo custom
-        fields = ['id', 'name', 'stage_id', 'x_manychat_id', 'user_id', 'partner_id'] # Campos a obtener
+        domain = [('x_studio_manychatid_crm', '=', manychat_id)] # Usar el nombre real del campo en Odoo
+        fields = ['id', 'name', 'stage_id', 'x_studio_manychatid_crm', 'user_id', 'partner_id'] # Campos a obtener
         
         try:
             # Buscar una oportunidad. Limitamos a 1 ya que manychat_id debería ser único.
@@ -130,7 +143,15 @@ class OdooCRMOpportunityService:
         Retorna el ID de la oportunidad en Odoo.
         """
         existing_opportunity = await self.find_opportunity_by_manychat_id(manychat_id)
-        
+
+        # Validar que contact_name sea un string y no un objeto Contact
+        if contact_name is not None and not isinstance(contact_name, str):
+            # Si es un objeto con first_name y last_name, construir el nombre completo
+            if hasattr(contact_name, 'first_name') and hasattr(contact_name, 'last_name'):
+                contact_name = f"{contact_name.first_name} {getattr(contact_name, 'last_name', '')}".strip()
+            else:
+                contact_name = str(contact_name)
+
         opportunity_data = {
             'name': opportunity_name,
             'stage_id': stage_odoo_id,

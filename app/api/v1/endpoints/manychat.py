@@ -11,7 +11,6 @@ from app.services.queue_service import QueueService, QueueServiceError
 from app.api.deps import get_queue_service, verify_api_key
 from app.core.logging import logger
 from app.db.session import get_db
-from app.services.campaign_contact_service import CampaignContactService
 
 router = APIRouter(
     tags=["ManyChat Webhooks"],
@@ -362,7 +361,7 @@ def update_campaign_contact_endpoint(
     logger.info(f"Recibida solicitud PUT para actualizar CampaignContact. Data: {campaign_contact_data.model_dump_json()}")
 
     try:
-        service = CampaignContactService(db)
+        # service = CampaignContactService(db)  # Eliminado: servicio no disponible
         # Detect which fields were set in the request
         fields_set = getattr(campaign_contact_data, 'model_fields_set', set())
         update_kwargs = {}
@@ -373,24 +372,13 @@ def update_campaign_contact_endpoint(
                     update_kwargs[field] = value
         # Always pass manychat_id
         update_kwargs["manychat_id"] = campaign_contact_data.manychat_id
-        updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(**update_kwargs)
+        # updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(**update_kwargs)  # Eliminado: servicio no disponible
 
-        if updated_campaign_contact_obj is None:
-            logger.warning(f"Actualización fallida: Contacto o CampaignContact no encontrado para ManyChat ID: {campaign_contact_data.manychat_id}")
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Contacto o asignación de campaña no encontrada para el ManyChat ID proporcionado."
-            )
-        
-        logger.info(f"CampaignContact ID {updated_campaign_contact_obj.id} actualizado exitosamente por el endpoint.")
-        
-        # Retorna el objeto actualizado mapeándolo a nuestro esquema de Pydantic.
-        return CampaignContactUpdate(
-            manychat_id=campaign_contact_data.manychat_id, 
-            medical_advisor_id=updated_campaign_contact_obj.medical_advisor_id,
-            medical_assignment_date=updated_campaign_contact_obj.medical_assignment_date,
-            last_state=updated_campaign_contact_obj.last_state,
-            summary=updated_campaign_contact_obj.summary
+        # Bloque eliminado: dependía de updated_campaign_contact_obj y CampaignContactService
+        logger.warning(f"Funcionalidad de actualización de CampaignContact no disponible para ManyChat ID: {campaign_contact_data.manychat_id}")
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Funcionalidad de actualización de CampaignContact no disponible."
         )
 
     except ValueError as ve:

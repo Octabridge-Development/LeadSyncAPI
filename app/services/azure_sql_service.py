@@ -144,9 +144,12 @@ class AzureSQLService:
 
     async def process_crm_opportunity_event(self, event: CRMOpportunityEvent) -> dict:
         """
-        Procesa un evento de oportunidad CRM para tracking en Azure SQL.
-        - Registra el estado de la oportunidad en Contact_State con categoría 'crm'.
+        Procesa un evento de oportunidad CRM:
+        - Registra el estado en Contact_State (Azure SQL)
+        - Actualiza el campo initial_state del contacto
+        - Traduce el stage ManyChat a ID Odoo y crea/actualiza la oportunidad en Odoo
         """
+        from app.services.odoo_crm_opportunity_service import odoo_crm_opportunity_service
         try:
             with get_db_session() as db:
                 contact_repo = ContactRepository(db)
@@ -155,14 +158,50 @@ class AzureSQLService:
                 if not contact:
                     self.logger.warning(f"Contacto con manychat_id {event.manychat_id} no encontrado para evento de oportunidad CRM.")
                     raise ValueError(f"Contact not found for CRM opportunity event: {event.manychat_id}")
-                state_summary = f"Stage {event.stage_odoo_id}: {event.stage_manychat}"
-                state = state_repo.create(
+                # Actualizar el campo initial_state del contacto
+                contact.initial_state = event.stage_manychat
+                db.add(contact)
+                db.commit()
+                db.refresh(contact)
+                # Guardar el estado exactamente como se recibe de ManyChat (stage_manychat)
+                state = state_repo.create_or_update(
                     contact_id=contact.id,
-                    state=state_summary,
+                    state=event.stage_manychat,
                     category="crm"
                 )
-                self.logger.info(f"Evento de oportunidad CRM registrado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
-                return {"status": "success", "contact_id": contact.id, "state_id": state.id}
+                self.logger.info(f"Evento de oportunidad CRM registrado en Azure SQL y estado principal actualizado. Contact ID: {contact.id}, State ID: {state.id}")
+
+                # --- Lógica de integración con Odoo ---
+                stage_odoo_id = event.stage_odoo_id
+                if not stage_odoo_id:
+                    self.logger.warning(f"No se encontró mapeo de stage Odoo para '{event.stage_manychat}'. No se sincroniza con Odoo.")
+                    return {"status": "success", "contact_id": contact.id, "state_id": state.id, "odoo": "skipped_no_stage_mapping"}
+
+                # Se puede usar el nombre del contacto y otros datos si están disponibles
+                opportunity_name = f"{contact.first_name} {contact.last_name or ''}".strip() or f"Oportunidad {event.manychat_id}"
+                advisor_odoo_id = None
+                if event.advisor_id:
+                    try:
+                        advisor_odoo_id = int(event.advisor_id)
+                    except Exception:
+                        self.logger.warning(f"advisor_id '{event.advisor_id}' no es un entero válido para Odoo.")
+
+                # Llamar a Odoo para crear/actualizar la oportunidad
+                try:
+                    odoo_id = await odoo_crm_opportunity_service.create_or_update_opportunity(
+                        manychat_id=event.manychat_id,
+                        opportunity_name=opportunity_name,
+                        stage_odoo_id=stage_odoo_id,
+                        advisor_odoo_id=advisor_odoo_id,
+                        contact_name=opportunity_name,  # Usar el nombre completo ya construido
+                        contact_email=contact.email,
+                        contact_phone=contact.phone
+                    )
+                    self.logger.info(f"Oportunidad sincronizada con Odoo. Odoo ID: {odoo_id}")
+                    return {"status": "success", "contact_id": contact.id, "state_id": state.id, "odoo_id": odoo_id}
+                except Exception as e:
+                    self.logger.error(f"Error al sincronizar oportunidad con Odoo: {str(e)}", exc_info=True)
+                    return {"status": "success", "contact_id": contact.id, "state_id": state.id, "odoo_error": str(e)}
         except Exception as e:
             self.logger.error(f"Error procesando evento de oportunidad CRM: {str(e)}", exc_info=True)
             raise
