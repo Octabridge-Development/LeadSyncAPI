@@ -43,7 +43,7 @@ class AzureSQLService:
                     "initial_state": event.estado_inicial
                 }
                 contact = contact_repo.create_or_update(contact_data)
-                state = state_repo.create(
+                state = state_repo.create_or_update(
                     contact_id=contact.id,
                     state=event.ultimo_estado,
                     category="manychat"
@@ -131,7 +131,7 @@ class AzureSQLService:
                     raise ValueError(f"Contact not found for CRM event tracking: {event.manychat_id}")
 
                 state_summary = f"Stage {event.state.stage_id}: {event.state.summary or 'Update'}"
-                state = state_repo.create(
+                state = state_repo.create_or_update(
                     contact_id=contact.id,
                     state=state_summary,
                     category="crm"

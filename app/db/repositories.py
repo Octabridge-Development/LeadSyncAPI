@@ -21,9 +21,9 @@ class ContactRepository:
         Crea un nuevo contacto o actualiza uno existente (UPSERT)
         basado en el manychat_id.
         """
-        existing = self.get_by_manychat_id(contact_data["manychat_id"])
+        existing_contact = self.get_by_manychat_id(contact_data["manychat_id"])
         
-        if existing:
+        if existing_contact:
             # Actualiza el contacto existente
             for key, value in contact_data.items():
                 # Evitar actualizar 'odoo_sync_status' si ya está 'synced'
@@ -32,9 +32,9 @@ class ContactRepository:
                 if key == 'odoo_sync_status':
                     continue 
 
-                if hasattr(existing, key) and value is not None:
-                    setattr(existing, key, value)
-            contact = existing
+                if hasattr(existing_contact, key) and value is not None:
+                    setattr(existing_contact, key, value)
+            contact = existing_contact
         else:
             # Crea un nuevo contacto
             contact = Contact(**contact_data)

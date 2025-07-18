@@ -3,9 +3,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks
 from typing import Annotated
 
+
 from app.schemas.crm import CRMLeadEvent, CRMLeadResponse # Importamos los esquemas que creaste
 from app.services.queue_service import queue_service # Importamos el servicio de colas de Felipe
-## Import eliminado: odoo_crm_service ya no existe
+from app.core.config import get_settings
 
 # Router específico para CRM
 router = APIRouter(
@@ -13,8 +14,10 @@ router = APIRouter(
     tags=["CRM"] #
 )
 
-# Variable para la API Key esperada (debería estar en variables de entorno)
-EXPECTED_API_KEY = "Miasaludnatural123**" 
+
+# Obtener la API Key desde la configuración
+settings = get_settings()
+EXPECTED_API_KEY = settings.API_KEY
 
 # Dependencia para verificar la API Key
 async def verify_api_key(x_api_key: Annotated[str, Header()]):
