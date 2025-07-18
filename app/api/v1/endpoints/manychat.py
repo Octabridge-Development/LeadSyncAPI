@@ -334,53 +334,38 @@ async def verify_webhook(
     status_code=status.HTTP_200_OK,
     tags=["ManyChat"],
 )
+
+def _build_update_kwargs(campaign_contact_data: 'CampaignContactUpdate') -> dict:
+    """
+    Construye el diccionario de campos a actualizar para CampaignContact a partir de los datos recibidos.
+    """
+    fields_set = getattr(campaign_contact_data, 'model_fields_set', set())
+    update_kwargs = {}
+    for field in ["campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state", "summary"]:
+        if field in fields_set and hasattr(campaign_contact_data, field):
+            value = getattr(campaign_contact_data, field, None)
+            if value is not None:
+                update_kwargs[field] = value
+    update_kwargs["manychat_id"] = campaign_contact_data.manychat_id
+    return update_kwargs
+
 def update_campaign_contact_endpoint(
-    campaign_contact_data: CampaignContactUpdate, 
-    db: Session = Depends(get_db),
+    campaign_contact_data: 'CampaignContactUpdate',
+    db: 'Session' = Depends(get_db),
     api_key: str = Depends(verify_api_key)
 ):
     """
     Endpoint para actualizar campos específicos de un registro de Campaign_Contact.
-
-    Args:
-        campaign_contact_data (CampaignContactUpdate): Objeto Pydantic con los datos
-                                                      para la actualización, incluyendo
-                                                      el ManyChat ID del contacto.
-        db (Session): Sesión de base de datos sincrónica inyectada por FastAPI.
-        api_key (str): Dependencia para verificar la API Key (proporcionada por ManyChat o un sistema externo).
-
-    Returns:
-        CampaignContactUpdate: Los datos del registro de Campaign_Contact que fueron actualizados.
-
-    Raises:
-        HTTPException:
-            - 404 NOT FOUND: Si el Contacto o el CampaignContact asociado no son encontrados.
-            - 400 BAD REQUEST: Si el ID del asesor médico no es válido.
-            - 500 INTERNAL SERVER ERROR: Para cualquier otro error inesperado.
     """
     logger.info(f"Recibida solicitud PUT para actualizar CampaignContact. Data: {campaign_contact_data.model_dump_json()}")
-
     try:
-        # service = CampaignContactService(db)  # Eliminado: servicio no disponible
-        # Detect which fields were set in the request
-        fields_set = getattr(campaign_contact_data, 'model_fields_set', set())
-        update_kwargs = {}
-        for field in ["campaign_id", "medical_advisor_id", "medical_assignment_date", "last_state", "summary"]:
-            if field in fields_set and hasattr(campaign_contact_data, field):
-                value = getattr(campaign_contact_data, field, None)
-                if value is not None:
-                    update_kwargs[field] = value
-        # Always pass manychat_id
-        update_kwargs["manychat_id"] = campaign_contact_data.manychat_id
+        update_kwargs = _build_update_kwargs(campaign_contact_data)
         # updated_campaign_contact_obj = service.update_campaign_contact_by_manychat_id(**update_kwargs)  # Eliminado: servicio no disponible
-
-        # Bloque eliminado: dependía de updated_campaign_contact_obj y CampaignContactService
         logger.warning(f"Funcionalidad de actualización de CampaignContact no disponible para ManyChat ID: {campaign_contact_data.manychat_id}")
         raise HTTPException(
             status_code=status.HTTP_501_NOT_IMPLEMENTED,
             detail="Funcionalidad de actualización de CampaignContact no disponible."
         )
-
     except ValueError as ve:
         logger.error(f"Error de validación en la solicitud PUT: {ve}")
         raise HTTPException(
