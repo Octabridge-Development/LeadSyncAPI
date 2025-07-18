@@ -32,6 +32,11 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
+    # Agregar permisos para id-token
+    permissions:
+      id-token: write # Permite solicitar un token federado
+      contents: read  # Necesario para checkout
+
     steps:
       - name: 'Login to Azure'
         uses: azure/login@v2
