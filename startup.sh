@@ -3,12 +3,12 @@
 echo "🚀 Iniciando MiaSalud Integration API..."
 
 # Verificar Python
-python --version
+python3 --version
 
 # Instalar dependencias si no existen
 if [ ! -d "venv" ]; then
     echo "📦 Creando entorno virtual..."
-    python -m venv venv
+    python3 -m venv venv
 fi
 
 # Activar entorno virtual
@@ -24,6 +24,11 @@ echo "🔍 Verificando uvicorn..."
 which uvicorn
 uvicorn --version
 
-# Iniciar la aplicación
+# Iniciar los workers en background y guardar logs
+echo "🛠️ Iniciando workers en background..."
+python3 start_workers.py > worker.log 2>&1 &
+WORKER_PID=$!
+
+# Iniciar la aplicación API
 echo "🌐 Iniciando servidor..."
 exec uvicorn application:app --host 0.0.0.0 --port 8000

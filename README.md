@@ -58,7 +58,7 @@ miasalud-integration/
 ├── app/                            # Código principal de la aplicación
 │   ├── api/                        # Definición de endpoints API
 │   │   ├── __init__.py
-│   │   ├── deps.py                 # Dependencias comunes para endpoints
+│   │   ├── deps.py                 # Dependencias y validaciones centralizadas para endpoints (API Key, servicios, etc.)
 │   │   └── v1/                     # Versión 1 de la API
 │   │       ├── __init__.py
 │   │       ├── router.py           # Router principal 
@@ -238,7 +238,8 @@ miasalud-integration/
 
 ## Seguridad
 - Todos los endpoints protegidos requieren el header `X-API-KEY`.
-- Las credenciales deben gestionarse por variables de entorno o Azure Key Vault.
+- La validación de la API Key y otras dependencias se realiza de forma centralizada en `app/api/deps.py`.
+- No existen claves hardcodeadas en el código fuente; todas las credenciales se gestionan por variables de entorno o Azure Key Vault.
 
 ## Workers y Procesamiento Asíncrono
 - Ejecuta los workers con:
@@ -247,10 +248,12 @@ miasalud-integration/
   python -m workers.campaign_processor
   ```
 - Los workers procesan colas de Azure y sincronizan con Odoo y Azure SQL.
+- El intervalo de sincronización de los workers se define mediante la constante `DEFAULT_SYNC_INTERVAL` y puede ser configurado por variable de entorno (`SYNC_INTERVAL`).
 
 ## Monitoreo y Health
 - Health checks: `/health`, `/api/v1/reports/health`
 - Logs estructurados y métricas en `app/utils/monitoring.py`
+- Todo el logging es consistente y estructurado usando el logger configurado; no se usan prints en producción.
 
 ## Docker y Despliegue
 - Usa `docker-compose.yml` para desarrollo y pruebas locales.
@@ -270,39 +273,38 @@ miasalud-integration/
   pytest
   ```
 - Los tests usan variables de entorno desde `.env` o CI/CD.
+# Buenas Prácticas y QA
+
+El proyecto fue sometido a un proceso de QA y refactorización para cumplir con buenas prácticas de código limpio, seguridad y mantenibilidad:
+
+- Se eliminaron duplicaciones internas y comentarios obsoletos.
+- Se centralizaron dependencias y validaciones en `app/api/deps.py`.
+- Se estandarizó el nombramiento: snake_case para variables/campos, PascalCase para clases.
+- Los valores por defecto importantes (como intervalos) están definidos como constantes descriptivas.
+- El código está libre de prints y comentarios temporales.
+- Se sigue el principio DRY y se promueve la mantenibilidad.
 
 ---
 
-## Avances y Estado Actual (Junio 2025)
+# Observaciones de Migración CRM (Informe 15 Enero 2025)
 
-### ✔️ Integración completa ManyChat → Azure SQL → Odoo
-- Contactos y asignaciones de campaña de ManyChat se reciben vía webhooks y se encolan en Azure Storage Queue.
-- Workers robustos procesan colas y sincronizan datos en Azure SQL y Odoo.
-- El campo `odoo_sync_status` controla el estado de sincronización (`pending`, `success`, `error`).
-- Los workers ahora reintentan automáticamente los contactos con estado `error`.
-- Ejemplo de payload y curl para el webhook de ManyChat documentado.
+Este proyecto está en proceso de migración desde la sincronización de contactos con Odoo hacia un sistema de gestión de oportunidades CRM basado en stages. Las tareas de infraestructura y backend core (Felipe) incluyen:
 
-### ✔️ Endpoints y servicios Odoo
-- Endpoints GET/POST/PUT/DELETE para `/api/v1/odoo/contacts/` funcionales y documentados.
-- Solucionado el error de instancia en el servicio Odoo (`'str' object has no attribute '_enforce_rate_limit'`).
-- El servicio Odoo usa una instancia singleton correctamente configurada desde variables de entorno.
-- El método `create_or_update_contact` sincroniza contactos con Odoo usando campos personalizados (`x_manychat_id`).
+- Eliminación de la lógica de sincronización de contactos con Odoo.
+- Eliminación del worker odoo_sync_worker.py.
+- Actualización de azure_sql_service.py para remover llamadas a Odoo en contactos.
+- Creación de un nuevo schema CRM (crm_opportunity.py) para el mapeo de stages ManyChat ↔ Odoo.
+- Refactorización de workers/crm_processor.py para gestionar oportunidades CRM y mapeo automático de stages.
+- Actualización de docker-compose.yml y variables de entorno para el nuevo flujo.
 
-### ✔️ Infraestructura y Docker
-- Dockerfiles y docker-compose revisados y funcionales para desarrollo y producción.
-- Añadido `ENV PYTHONPATH=/app` en Dockerfile de workers para evitar errores de importación.
-- El worker de sincronización Odoo (`odoo_sync_worker.py`) está integrado y documentado.
-- Los workers pueden configurarse para ejecutar con intervalos de sincronización (ej. cada 10 segundos).
+**Diferencias entre ramas:**
+- La rama release/contactos-odoo-backup contiene el código anterior con sincronización de contactos en Odoo.
+- La rama feature/crm-opportunities-only contiene el nuevo desarrollo enfocado en oportunidades CRM y elimina la sincronización de contactos con Odoo.
 
-### ✔️ Pruebas y monitoreo
-- Pruebas automatizadas para endpoints y workers.
-- Health checks y logs estructurados para visibilidad y troubleshooting.
-- Documentación de pruebas y ejemplos de uso actualizados.
-
-### ✔️ Mejoras pendientes y recomendaciones
-- Mejorar la gestión de errores y visibilidad de logs para la sincronización Odoo y los endpoints.
-- (Opcional) Limitar reintentos de sincronización para evitar loops infinitos en errores persistentes.
-- Validar y documentar el flujo extremo a extremo con ejemplos reales.
+**Impacto:**
+- Los contactos nuevos solo se crearán en Azure SQL.
+- Las oportunidades CRM se gestionan según el mapeo de stages ManyChat → Odoo.
+- No se crearán ni sincronizarán contactos nuevos en Odoo.
 
 ---
 

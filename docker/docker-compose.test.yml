@@ -9,10 +9,7 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - API_KEY=${API_KEY}
       - DEBUG=true
-      - ODOO_URL=http://dummy-odoo
-      - ODOO_DB=dummy_db
-      - ODOO_USERNAME=dummy_user
-      - ODOO_PASSWORD=dummy_pass
+      # Variables de Odoo eliminadas del servicio API de test
       - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=dummy;AccountKey=dummy;EndpointSuffix=core.windows.net
     ports:
       - "8000:8000"
@@ -31,10 +28,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - DEBUG=true
-      - ODOO_URL=http://dummy-odoo
-      - ODOO_DB=dummy_db
-      - ODOO_USERNAME=dummy_user
-      - ODOO_PASSWORD=dummy_pass
+      # Variables de Odoo eliminadas del servicio workers de test
       - AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=dummy;AccountKey=dummy;EndpointSuffix=core.windows.net
     depends_on:
       - api

@@ -20,18 +20,24 @@ Recomendaciones:
 - Mantener la lógica idempotente para evitar duplicados en reintentos.
 """
 
+
 import asyncio
 import json
+import os
 from app.services.queue_service import QueueService, QueueServiceError
 from app.services.azure_sql_service import AzureSQLService
 from app.schemas.manychat import ManyChatCampaignAssignmentEvent
 from app.core.logging import logger
 
+# Constante para el intervalo de sincronización por defecto
+DEFAULT_SYNC_INTERVAL = 10
+
 async def process_campaign_messages(queue_service: QueueService, azure_sql_service: AzureSQLService):
     """
     Consume y procesa mensajes de la cola de campañas en un bucle infinito.
     """
-    logger.info("Worker de campaña iniciado. Esperando mensajes de 'manychat-campaign-queue'...")
+    sync_interval = int(os.getenv("SYNC_INTERVAL", DEFAULT_SYNC_INTERVAL))  # segundos entre ciclos
+    logger.info(f"Worker de campaña iniciado. Esperando mensajes de 'manychat-campaign-queue'... Intervalo: {sync_interval}s")
     while True:
         message = None
         try:
@@ -64,14 +70,14 @@ async def process_campaign_messages(queue_service: QueueService, azure_sql_servi
                     manychat_id=event.manychat_id, 
                     message_id=message.id
                 )
-                await asyncio.sleep(1) # Pausa para evitar saturar Odoo
+                await asyncio.sleep(sync_interval) # Espera configurable
             else:
-                # No hay mensajes, espera un poco más
-                await asyncio.sleep(10)
+                logger.info(f"No hay mensajes en la cola de campañas. Esperando {sync_interval} segundos...")
+                await asyncio.sleep(sync_interval)
 
         except QueueServiceError as e:
-            logger.error(f"Error de servicio de colas: {e}. Reintentando en 10 segundos.", exc_info=True)
-            await asyncio.sleep(10)
+            logger.error(f"Error de servicio de colas: {e}. Reintentando en {sync_interval} segundos.", exc_info=True)
+            await asyncio.sleep(sync_interval)
         except json.JSONDecodeError:
             logger.error("Error al decodificar JSON. Mensaje malformado.", raw_content=message.content if message else "N/A")
             if message:
@@ -84,7 +90,7 @@ async def process_campaign_messages(queue_service: QueueService, azure_sql_servi
                 logger.warning("Mensaje malformado eliminado.", message_id=message.id)
         except Exception as e:
             logger.error(f"Error inesperado procesando mensaje de campaña: {e}", exc_info=True)
-            await asyncio.sleep(5)
+            await asyncio.sleep(sync_interval)
 
 async def main():
     """
