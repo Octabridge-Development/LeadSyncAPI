@@ -45,11 +45,11 @@ class CRMProcessor:
                     if not contact:
                         logger.error(f"No se encontró el contacto con manychat_id={event.manychat_id} en la BD. Se elimina el mensaje de la cola.")
                         await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
-                        return
+                        continue
                     if contact.odoo_sync_status != "pending":
                         logger.info(f"Contacto manychat_id={event.manychat_id} ya sincronizado (odoo_sync_status={contact.odoo_sync_status}). Se elimina el mensaje de la cola.")
                         await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
-                        return
+                        continue
                     # Obtener el último estado
                     contact_state = state_repo.get_latest_by_contact(contact.id)
                     # Preparar datos para Odoo
@@ -60,7 +60,7 @@ class CRMProcessor:
                     if not stage_odoo_id:
                         logger.error(f"No se pudo mapear el stage de ManyChat '{stage_manychat}' a un stage_id de Odoo. Se elimina el mensaje de la cola.")
                         await self.queue_service.delete_message(self.queue_name, message.id, message.pop_receipt)
-                        return
+                        continue
                     # No modificar ni copiar el campo stage_odoo_id, es un property calculado
                     # Lógica de integración con Odoo
                     logger.info(f"Creando oportunidad en Odoo para contacto: {full_name}, manychat_id: {contact.manychat_id}, stage: {stage_manychat}, stage_odoo_id: {stage_odoo_id}")
