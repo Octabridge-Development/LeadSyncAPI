@@ -58,7 +58,7 @@ miasalud-integration/
 ├── app/                            # Código principal de la aplicación
 │   ├── api/                        # Definición de endpoints API
 │   │   ├── __init__.py
-│   │   ├── deps.py                 # Dependencias comunes para endpoints
+│   │   ├── deps.py                 # Dependencias y validaciones centralizadas para endpoints (API Key, servicios, etc.)
 │   │   └── v1/                     # Versión 1 de la API
 │   │       ├── __init__.py
 │   │       ├── router.py           # Router principal 
@@ -238,7 +238,8 @@ miasalud-integration/
 
 ## Seguridad
 - Todos los endpoints protegidos requieren el header `X-API-KEY`.
-- Las credenciales deben gestionarse por variables de entorno o Azure Key Vault.
+- La validación de la API Key y otras dependencias se realiza de forma centralizada en `app/api/deps.py`.
+- No existen claves hardcodeadas en el código fuente; todas las credenciales se gestionan por variables de entorno o Azure Key Vault.
 
 ## Workers y Procesamiento Asíncrono
 - Ejecuta los workers con:
@@ -247,10 +248,12 @@ miasalud-integration/
   python -m workers.campaign_processor
   ```
 - Los workers procesan colas de Azure y sincronizan con Odoo y Azure SQL.
+- El intervalo de sincronización de los workers se define mediante la constante `DEFAULT_SYNC_INTERVAL` y puede ser configurado por variable de entorno (`SYNC_INTERVAL`).
 
 ## Monitoreo y Health
 - Health checks: `/health`, `/api/v1/reports/health`
 - Logs estructurados y métricas en `app/utils/monitoring.py`
+- Todo el logging es consistente y estructurado usando el logger configurado; no se usan prints en producción.
 
 ## Docker y Despliegue
 - Usa `docker-compose.yml` para desarrollo y pruebas locales.
@@ -270,6 +273,16 @@ miasalud-integration/
   pytest
   ```
 - Los tests usan variables de entorno desde `.env` o CI/CD.
+# Buenas Prácticas y QA
+
+El proyecto fue sometido a un proceso de QA y refactorización para cumplir con buenas prácticas de código limpio, seguridad y mantenibilidad:
+
+- Se eliminaron duplicaciones internas y comentarios obsoletos.
+- Se centralizaron dependencias y validaciones en `app/api/deps.py`.
+- Se estandarizó el nombramiento: snake_case para variables/campos, PascalCase para clases.
+- Los valores por defecto importantes (como intervalos) están definidos como constantes descriptivas.
+- El código está libre de prints y comentarios temporales.
+- Se sigue el principio DRY y se promueve la mantenibilidad.
 
 ---
 
