@@ -2,8 +2,8 @@ from azure.storage.queue.aio import QueueServiceClient, QueueClient
 from azure.core.exceptions import ResourceExistsError, ResourceNotFoundError
 import json
 from datetime import datetime, timezone
-from typing import Optional, Any, Callable, Awaitable # Importa Callable y Awaitable
-import asyncio # Importar asyncio para asyncio.sleep
+from typing import Optional, Any, Callable, Awaitable
+import asyncio
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 from app.core.config import get_settings
 from app.core.logging import logger
@@ -19,6 +19,7 @@ def datetime_handler(obj: Any) -> str:
     raise TypeError(f'Object of type {obj.__class__.__name__} is not JSON serializable')
 
 class QueueService:
+    CRM_OPPORTUNITIES_QUEUE_NAME = "manychat-crm-opportunities-queue"
     """
     Servicio completo y robusto para interactuar de forma asíncrona con Azure Storage Queue.
     Implementa reintentos, DLQ, y no duplica código.
@@ -30,7 +31,7 @@ class QueueService:
         )
         self.campaign_queue_name = "manychat-campaign-queue"
         self.contact_queue_name = "manychat-contact-queue"
-        self.crm_queue_name = "manychat-crm-queue"  # <--- Agregado
+        self.crm_queue_name = "manychat-crm-opportunities-queue"  # <--- MODIFICADO AQUÍ PARA ALINEAR CON EL DOCUMENTO 
         self.dlq_name = "manychat-events-dlq"
 
     async def ensure_queues_exist(self) -> None:
@@ -39,7 +40,7 @@ class QueueService:
         queues_to_ensure = [
             self.campaign_queue_name,
             self.contact_queue_name,
-            self.crm_queue_name,  # <--- Agregado para CRM
+            self.crm_queue_name,
             self.dlq_name
         ]
         for queue_name in queues_to_ensure:

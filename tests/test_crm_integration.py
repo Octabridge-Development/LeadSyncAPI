@@ -39,7 +39,7 @@ def test_creacion_lead_nuevo():
         "first_name": "Juan",
         "last_name": "Perez",
         "entry_date": "2025-07-07T10:00:00Z",
-        "state": {"sequence": 1, "summary": "Primer contacto", "date": "2025-07-07T10:01:00Z"}
+        # Validación de estado de oportunidad, sin lógica de Odoo/contactos Odoo
     }
     
     # Usamos 'patch' para simular que el servicio de colas funciona sin ejecutarlo realmente

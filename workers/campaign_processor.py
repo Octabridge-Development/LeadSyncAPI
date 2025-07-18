@@ -20,6 +20,7 @@ Recomendaciones:
 - Mantener la lógica idempotente para evitar duplicados en reintentos.
 """
 
+
 import asyncio
 import json
 import os
@@ -28,11 +29,14 @@ from app.services.azure_sql_service import AzureSQLService
 from app.schemas.manychat import ManyChatCampaignAssignmentEvent
 from app.core.logging import logger
 
+# Constante para el intervalo de sincronización por defecto
+DEFAULT_SYNC_INTERVAL = 10
+
 async def process_campaign_messages(queue_service: QueueService, azure_sql_service: AzureSQLService):
     """
     Consume y procesa mensajes de la cola de campañas en un bucle infinito.
     """
-    sync_interval = int(os.getenv("SYNC_INTERVAL", 10))  # segundos entre ciclos
+    sync_interval = int(os.getenv("SYNC_INTERVAL", DEFAULT_SYNC_INTERVAL))  # segundos entre ciclos
     logger.info(f"Worker de campaña iniciado. Esperando mensajes de 'manychat-campaign-queue'... Intervalo: {sync_interval}s")
     while True:
         message = None

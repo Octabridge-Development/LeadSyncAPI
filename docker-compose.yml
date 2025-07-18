@@ -23,50 +23,8 @@ services:
     networks:
       - miasalud_network
 
-  # Workers de procesamiento
-  workers:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.workers
-    container_name: miasalud_workers
-    environment:
-      - DEBUG=true
-      - API_KEY=${API_KEY}
-      - DATABASE_URL=${DATABASE_URL} # Azure SQL real
-      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING} # Azure Storage real
-      - ODOO_URL=${ODOO_URL}
-      - ODOO_DB=${ODOO_DB}
-      - ODOO_USERNAME=${ODOO_USERNAME}
-      - ODOO_PASSWORD=${ODOO_PASSWORD}
-    volumes:
-      - ./app:/app/app
-      - ./workers:/app/workers
-    networks:
-      - miasalud_network
 
-  # Worker de sincronización Odoo
-  odoo_sync_worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.workers
-    container_name: miasalud_odoo_sync_worker
-    environment:
-      - DEBUG=true
-      - API_KEY=${API_KEY}
-      - DATABASE_URL=${DATABASE_URL}
-      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
-      - ODOO_URL=${ODOO_URL}
-      - ODOO_DB=${ODOO_DB}
-      - ODOO_USERNAME=${ODOO_USERNAME}
-      - ODOO_PASSWORD=${ODOO_PASSWORD}
-    volumes:
-      - ./app:/app/app
-      - ./workers:/app/workers
-    command: python /app/workers/odoo_sync_worker.py
-    networks:
-      - miasalud_network
-
-  # Worker de CRM
+  # Worker de CRM (procesa oportunidades y sincroniza con Odoo)
   crm_worker:
     build:
       context: .
@@ -85,6 +43,42 @@ services:
       - ./app:/app/app
       - ./workers:/app/workers
     command: python /app/workers/crm_processor.py
+    networks:
+      - miasalud_network
+  
+  # Worker de Contactos (procesa eventos de contacto ManyChat)
+  contact_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workers
+    container_name: miasalud_contact_worker
+    environment:
+      - DEBUG=true
+      - API_KEY=${API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+    volumes:
+      - ./app:/app/app
+      - ./workers:/app/workers
+    command: python /app/workers/contact_processor.py
+    networks:
+      - miasalud_network
+  
+  # Worker de Campañas (procesa eventos de asignación de campaña)
+  campaign_worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.workers
+    container_name: miasalud_campaign_worker
+    environment:
+      - DEBUG=true
+      - API_KEY=${API_KEY}
+      - DATABASE_URL=${DATABASE_URL}
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+    volumes:
+      - ./app:/app/app
+      - ./workers:/app/workers
+    command: python /app/workers/campaign_processor.py
     networks:
       - miasalud_network
 

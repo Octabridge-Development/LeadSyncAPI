@@ -21,9 +21,9 @@ class ContactRepository:
         Crea un nuevo contacto o actualiza uno existente (UPSERT)
         basado en el manychat_id.
         """
-        existing = self.get_by_manychat_id(contact_data["manychat_id"])
+        existing_contact = self.get_by_manychat_id(contact_data["manychat_id"])
         
-        if existing:
+        if existing_contact:
             # Actualiza el contacto existente
             for key, value in contact_data.items():
                 # Evitar actualizar 'odoo_sync_status' si ya está 'synced'
@@ -32,9 +32,9 @@ class ContactRepository:
                 if key == 'odoo_sync_status':
                     continue 
 
-                if hasattr(existing, key) and value is not None:
-                    setattr(existing, key, value)
-            contact = existing
+                if hasattr(existing_contact, key) and value is not None:
+                    setattr(existing_contact, key, value)
+            contact = existing_contact
         else:
             # Crea un nuevo contacto
             contact = Contact(**contact_data)
@@ -73,17 +73,29 @@ class ContactStateRepository:
     def __init__(self, db: Session):
         self.db = db
         
-    def create(self, contact_id: int, state: str, category: str = "manychat") -> ContactState:
-        """Crea un nuevo registro de estado de contacto."""
-        contact_state = ContactState(
-            contact_id=contact_id,
-            state=state,
-            category=category
-        )
-        self.db.add(contact_state)
-        self.db.commit()
-        self.db.refresh(contact_state)
-        return contact_state
+
+    def create_or_update(self, contact_id: int, state: str, category: str = "manychat") -> ContactState:
+        """
+        Crea o actualiza el estado del contacto: si existe un registro previo, lo actualiza; si no, lo crea.
+        Siempre habrá solo un registro por contacto.
+        """
+        latest = self.get_latest_by_contact(contact_id)
+        if latest:
+            latest.state = state
+            latest.category = category
+            self.db.commit()
+            self.db.refresh(latest)
+            return latest
+        else:
+            contact_state = ContactState(
+                contact_id=contact_id,
+                state=state,
+                category=category
+            )
+            self.db.add(contact_state)
+            self.db.commit()
+            self.db.refresh(contact_state)
+            return contact_state
         
     def get_latest_by_contact(self, contact_id: int) -> Optional[ContactState]:
         """Obtiene el último estado registrado para un contacto."""

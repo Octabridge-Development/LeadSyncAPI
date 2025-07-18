@@ -89,7 +89,6 @@ def check_odoo_health() -> Dict[str, Any]:
 
     # Código para cuando se habilite:
     # try:
-    #     from app.services.odoo_service import odoo_service
     #     version = odoo_service.client.version
     #     log_dependency_health("odoo", "ok")
     #     return {
