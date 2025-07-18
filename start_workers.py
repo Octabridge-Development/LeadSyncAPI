@@ -1,6 +1,16 @@
 # start_workers.py (en la raíz del proyecto, o workers/start_workers.py)
+
+
+# Asegura que la raíz del proyecto esté en sys.path para imports absolutos
+import os
+import sys
 import asyncio
 import logging
+
+ROOT_PATH = os.path.dirname(os.path.abspath(__file__))
+if ROOT_PATH not in sys.path:
+    sys.path.append(ROOT_PATH)
+
 from app.services.queue_service import QueueService # Para asegurar las colas existen
 from workers.queue_processor import start_manychat_contact_worker, start_manychat_campaign_worker
 

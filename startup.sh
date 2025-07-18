@@ -24,6 +24,12 @@ echo "🔍 Verificando uvicorn..."
 which uvicorn
 uvicorn --version
 
-# Iniciar la aplicación
+
+# Iniciar los workers en background y guardar logs
+echo "🛠️ Iniciando workers en background..."
+python start_workers.py > worker.log 2>&1 &
+WORKER_PID=$!
+
+# Iniciar la aplicación API
 echo "🌐 Iniciando servidor..."
 exec uvicorn application:app --host 0.0.0.0 --port 8000
