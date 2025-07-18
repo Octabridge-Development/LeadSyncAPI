@@ -1,13 +1,12 @@
 #!/bin/bash
 
-echo "🚀 Iniciando MiaSalud Integration API..."
+# Inicia la API con Gunicorn
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:8000 &
 
-# Iniciar la aplicación API y los workers en paralelo
-echo "🛠️ Iniciando API y workers en paralelo..."
-gunicorn -c gunicorn.conf.py app.main:app &
-python workers/campaign_processor.py &
-python workers/contact_processor.py &
-python workers/crm_processor.py &
+# Inicia los workers en segundo plano
+python /app/workers/crm_processor.py &
+python /app/workers/contact_processor.py &
+python /app/workers/campaign_processor.py &
 
-# Esperar a que todos los procesos terminen
+# Mantén el contenedor activo
 wait
