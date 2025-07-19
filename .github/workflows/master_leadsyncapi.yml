@@ -21,9 +21,15 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: . # Ajusta si el Dockerfile está en una subcarpeta (ej. ./docker)
+          file: ./Dockerfile # Especifica el Dockerfile si no está en la raíz
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/leadsyncapi:latest
+
+      - name: Verify image push
+        run: |
+          echo "Verificando que la imagen se subió correctamente..."
+          docker manifest inspect ${{ secrets.DOCKERHUB_USERNAME }}/leadsyncapi:latest || exit 1
 
   deploy:
     runs-on: ubuntu-latest
@@ -32,7 +38,6 @@ jobs:
       name: 'Production'
       url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
 
-    # Agregar permisos para id-token
     permissions:
       id-token: write # Permite solicitar un token federado
       contents: read  # Necesario para checkout
@@ -46,6 +51,7 @@ jobs:
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_B400E42A63C541C59CFE57D65204235F }}
 
       - name: 'Deploy to Azure Web App (Container)'
+        id: deploy-to-webapp
         uses: azure/webapps-deploy@v3
         with:
           app-name: 'LeadSyncAPI'
