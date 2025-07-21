@@ -2,6 +2,8 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 
 # Propiedades comunes para crear o actualizar un Asesor
+from datetime import datetime
+
 class AdvisorBase(BaseModel):
     name: str = Field(..., max_length=100, description="Nombre completo del asesor")
     email: Optional[EmailStr] = Field(None, max_length=100, description="Email del asesor")
@@ -11,8 +13,8 @@ class AdvisorBase(BaseModel):
     genre: Optional[str] = Field(None, max_length=25, description="Género del asesor")
     odoo_id: Optional[str] = Field(None, max_length=50, description="ID de Odoo")
     is_active: Optional[bool] = Field(None, description="¿Está activo?")
-    created_at: Optional[str] = Field(None, description="Fecha de creación")
-    updated_at: Optional[str] = Field(None, description="Fecha de actualización")
+    created_at: Optional[datetime] = Field(None, description="Fecha de creación")
+    updated_at: Optional[datetime] = Field(None, description="Fecha de actualización")
 
 # Esquema para crear un Asesor
 class AdvisorCreate(AdvisorBase):
@@ -30,3 +32,7 @@ class AdvisorInDB(AdvisorBase):
 
     class Config:
         from_attributes = True
+        orm_mode = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None,
+        }
