@@ -36,9 +36,11 @@ class CampaignContactRead(BaseModel):
     campaign_id: int
     contact_id: int
     commercial_advisor_id: Optional[int] = None
+    medical_advisor_id: Optional[int] = None
     registration_date: datetime
     commercial_assignment_date: Optional[datetime] = None
     commercial_process_start_date: Optional[datetime] = None
+    medical_assignment_date: Optional[datetime] = None
     medical_process_start_date: Optional[datetime] = None
     medical_process_end_date: Optional[datetime] = None
     quotation_start_date: Optional[datetime] = None
@@ -51,3 +53,6 @@ class CampaignContactRead(BaseModel):
 
     class Config:
         orm_mode = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() if v else None,
+        }
