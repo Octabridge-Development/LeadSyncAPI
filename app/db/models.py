@@ -144,6 +144,7 @@ class CampaignContact(Base):
     conversation_closed_date = Column(DateTime, nullable=True)
     last_state = Column(String(100), nullable=True)
     lead_state = Column(String(50), nullable=True)
+    summary = Column(Text, nullable=True)
 
     # Relationships
     campaign = relationship("Campaign", back_populates="contact_assignments")
@@ -160,12 +161,15 @@ class Advisor(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), nullable=False)
-    email = Column(String(100), nullable=False)
+    email = Column(String(100), nullable=True)
     phone = Column(String(20), nullable=True)
     role = Column(String(50), nullable=True)
     status = Column(String(20), nullable=True)
     genre = Column(String(25), nullable=True)
     odoo_id = Column(String(50), nullable=True)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
 
     # Relaciones explícitas para evitar ambigüedad con CampaignContact
     commercial_assignments = relationship(

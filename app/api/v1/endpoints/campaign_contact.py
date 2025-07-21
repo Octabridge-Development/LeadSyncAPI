@@ -37,5 +37,12 @@ def update_campaign_contacts_by_manychat_id(
                 setattr(cc, key, value)
         db.add(cc)
         updated.append(cc)
-    db.commit()
+    try:
+        logger.info(f"Intentando commit de {len(updated)} CampaignContact(s) para manychat_id={manychat_id}")
+        db.commit()
+        logger.info(f"Commit exitoso de CampaignContact(s) para manychat_id={manychat_id}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error al hacer commit de CampaignContact(s) para manychat_id={manychat_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Error al guardar los cambios en la base de datos")
     return updated
