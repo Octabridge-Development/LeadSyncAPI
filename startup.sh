@@ -1,34 +1,15 @@
 #!/bin/bash
 
-echo "🚀 Iniciando MiaSalud Integration API..."
+# Configura PYTHONPATH para incluir /app
+export PYTHONPATH=/app:$PYTHONPATH
 
-# Verificar Python
-python3 --version
+# Inicia la API con Gunicorn
+gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app --bind 0.0.0.0:8000 &
 
-# Instalar dependencias si no existen
-if [ ! -d "venv" ]; then
-    echo "📦 Creando entorno virtual..."
-    python3 -m venv venv
-fi
+# Inicia los workers en segundo plano
+python /app/workers/crm_processor.py &
+python /app/workers/contact_processor.py &
+python /app/workers/campaign_processor.py &
 
-# Activar entorno virtual
-source venv/bin/activate
-
-# Instalar dependencias
-echo "📦 Instalando dependencias..."
-pip install --upgrade pip
-pip install -r requirements.txt
-
-# Verificar que uvicorn esté instalado
-echo "🔍 Verificando uvicorn..."
-which uvicorn
-uvicorn --version
-
-# Iniciar los workers en background y guardar logs
-echo "🛠️ Iniciando workers en background..."
-python3 start_workers.py > worker.log 2>&1 &
-WORKER_PID=$!
-
-# Iniciar la aplicación API
-echo "🌐 Iniciando servidor..."
-exec uvicorn application:app --host 0.0.0.0 --port 8000
+# Mantén el contenedor activo esperando a que los procesos terminen
+wait
