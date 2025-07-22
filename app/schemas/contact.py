@@ -12,7 +12,6 @@ class ContactBase(BaseModel):
     phone: Optional[str] = Field(None, max_length=50, description="Teléfono del contacto")
     subscription_date: Optional[datetime] = Field(None, description="Fecha de suscripción del contacto")
     initial_state: Optional[str] = Field(None, max_length=255, description="Estado inicial del contacto")
-    odoo_contact_id: Optional[str] = Field(None, max_length=255, description="ID del contacto en Odoo")
     channel_id: Optional[int] = Field(None, description="ID del canal asociado")
     address_id: Optional[int] = Field(None, description="ID de la dirección asociada")
 

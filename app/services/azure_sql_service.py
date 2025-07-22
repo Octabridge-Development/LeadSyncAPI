@@ -7,7 +7,7 @@ from app.db.repositories import (
 from app.schemas.crm import CRMLeadEvent
 from app.schemas.manychat import ManyChatContactEvent, ManyChatCampaignAssignmentEvent 
 from app.schemas.crm_opportunity import CRMOpportunityEvent
-from app.db.models import Contact # Importa el modelo Contact, que tiene odoo_contact_id y odoo_sync_status
+from app.db.models import Contact
 from typing import Optional
 import logging
 
@@ -35,11 +35,13 @@ class AzureSQLService:
                     "manychat_id": event.manychat_id,
                     "first_name": event.nombre_lead,
                     "last_name": event.apellido_lead,
-                    "phone": event.whatsapp,
                     "email": event.email_lead,
+                    "gender": getattr(event, "gender", None),
+                    "phone": event.whatsapp,
                     "subscription_date": event.datetime_suscripcion,
                     "entry_date": event.datetime_actual,
                     "channel_id": channel.id if channel else None,
+                    "address_id": getattr(event, "address_id", None),
                     "initial_state": event.estado_inicial
                 }
                 contact = contact_repo.create_or_update(contact_data)
