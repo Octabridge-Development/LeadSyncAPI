@@ -19,12 +19,14 @@ router = APIRouter()
 
 
 
-# Orden lógico y limpio para Swagger UI
+
+# Primero la categoría ManyChat Webhooks
+router.include_router(manychat_router, prefix="/manychat", tags=["ManyChat Webhooks"])
+# Luego el resto
 router.include_router(contact_router, prefix="/contacts", tags=["Contacts"])
 router.include_router(campaign_router, prefix="/campaigns", tags=["Campaigns"])
 router.include_router(advisor_router, prefix="/advisors", tags=["Advisors"])
 router.include_router(campaign_contact_router, prefix="/campaign-contacts", tags=["CampaignContacts"])
 router.include_router(channel_router, prefix="/channels", tags=["Channels"])
 router.include_router(crm_opportunities_router, prefix="/crm", tags=["CRM Opportunities"])
-router.include_router(manychat_router, prefix="/manychat", tags=["ManyChat"])
 router.include_router(reports_router, prefix="/reports", tags=["Reports"])

@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Any
@@ -29,22 +28,36 @@ async def assign_campaign_and_state(
     if not contact:
         raise HTTPException(status_code=404, detail=f"No se encontró contacto con manychat_id={data.manychat_id}")
 
-    # Upsert CampaignContact
+    # Primero creamos/actualizamos el ContactState
+    contact_state = contact_state_repo.create_or_update(
+        contact_id=contact.id,
+        state=data.state,
+        category=data.category
+    )
+
+    # Upsert CampaignContact con el nuevo estado
     cc_data = {
         "contact_id": contact.id,
         "campaign_id": data.campaign_id,
-        "last_state": data.ultimo_estado,
+        "last_state": data.state,  # Actualizamos last_state con el estado actual
         "summary": data.summary,
-        "sync_status": "new",
     }
-    # Asignar advisor según tipo
-    if data.tipo_asignacion == "comercial":
+    # Asignar ambos asesores si están presentes y válidos
+    if data.comercial_id not in [None, "", 0]:
         cc_data["commercial_advisor_id"] = data.comercial_id
         cc_data["commercial_assignment_date"] = data.fecha_asignacion
-    elif data.tipo_asignacion == "medico":
+    else:
+        cc_data["commercial_advisor_id"] = None
+        cc_data["commercial_assignment_date"] = None
+    if data.medico_id not in [None, "", 0]:
         cc_data["medical_advisor_id"] = data.medico_id
         cc_data["medical_assignment_date"] = data.fecha_asignacion
+    else:
+        cc_data["medical_advisor_id"] = None
+        cc_data["medical_assignment_date"] = None
 
+    # Siempre marcar sync_status como 'new' para que el worker CRM procese el cambio en Odoo
+    cc_data["sync_status"] = "new"
     campaign_contact = campaign_contact_repo.create_or_update_assignment(cc_data)
 
     # Upsert ContactState
@@ -60,11 +73,10 @@ async def assign_campaign_and_state(
         "campaign_id": data.campaign_id,
         "state": data.state,
         "summary": data.summary,
-        "tipo_asignacion": data.tipo_asignacion,
         "comercial_id": data.comercial_id,
         "medico_id": data.medico_id,
         "fecha_asignacion": data.fecha_asignacion.isoformat(),
-        "ultimo_estado": data.ultimo_estado,
+        "ultimo_estado": data.state,  # Usamos el state actual
         "contact_id": contact.id,
         "contact_state_id": contact_state.id,
     }
@@ -104,7 +116,8 @@ def update_campaign_contact(contact_id: int, campaign_id: int, data: CampaignCon
     for key, value in update_fields.items():
         if hasattr(cc, key):
             setattr(cc, key, value)
-    cc.sync_status = "updated"
+    # Siempre marcar sync_status como 'new' para que el worker CRM procese el cambio en Odoo
+    cc.sync_status = "new"
     db.add(cc)
     db.commit()
     db.refresh(cc)

@@ -152,6 +152,7 @@ class OdooCRMOpportunityService:
         contact_email: Optional[str] = None,
         contact_phone: Optional[str] = None,
         source_id: Optional[int] = None,             # ID del canal de entrada
+        channel_name: Optional[str] = None,          # Nombre del canal de entrada (instagram, tiktok, etc)
         fecha_entrada: Optional[datetime] = None,    # Fecha de entrada
         fecha_ultimo_estado: Optional[datetime] = None  # Fecha del último estado
     ) -> int:
@@ -169,30 +170,25 @@ class OdooCRMOpportunityService:
             else:
                 contact_name = str(contact_name)
 
+        # Usar el nombre del canal si está disponible, si no, usar el ID (legacy)
+        canal_entrada_value = channel_name if channel_name else source_id
+
         opportunity_data = {
             'name': contact_name,  # Usamos el nombre del contacto como nombre de la oportunidad
             'stage_id': stage_odoo_id,
             'x_studio_manychatid_api': manychat_id,
             'type': 'opportunity',
-            # Datos de contacto básicos (solo email y teléfono)
             'email_from': contact_email,
             'phone': contact_phone,
-            # Fechas
             'x_studio_fecha_entrada': fecha_entrada.strftime('%Y-%m-%d') if fecha_entrada else datetime.now(timezone.utc).strftime('%Y-%m-%d'),
             'x_studio_ultimo_estado_fecha': fecha_ultimo_estado.strftime('%Y-%m-%d') if fecha_ultimo_estado else datetime.now(timezone.utc).strftime('%Y-%m-%d'),
-            # Asesores
-            'x_studio_asesor_medico': advisor_medico_id,  # Asesor médico
-            'x_studio_asesor_comercial': advisor_comercial_id,  # Asesor comercial
-            # Canal de entrada
-            'x_studio_canal_entrada': source_id,  # Canal de entrada/medio
+            'x_studio_asesor_medico': advisor_medico_id,
+            'x_studio_asesor_comercial': advisor_comercial_id,
+            'x_studio_canal_entrada': canal_entrada_value,  # Ahora puede ser el nombre del canal
         }
-
         # No asignar user_id/advisor
-
-        # Asume un 'Source' para ManyChat si tienes uno configurado en Odoo
-        # Puedes buscar el ID de la fuente 'ManyChat' si es necesario
-        if source_id:
-             opportunity_data['source_id'] = source_id
+        # Eliminar claves con valor None para evitar errores de XML-RPC
+        opportunity_data = {k: v for k, v in opportunity_data.items() if v is not None}
 
         if existing_opportunity:
             # Actualizar oportunidad existente

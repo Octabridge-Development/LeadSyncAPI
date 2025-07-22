@@ -64,31 +64,22 @@ async def process_campaign_contacts():
                 for cc in contacts:
                     try:
                         # Obtener el último estado relevante de ContactState para este contacto
-                        last_state = db.query(ContactState).filter(
+                        contact_state = db.query(ContactState).filter(
                             ContactState.contact_id == cc.contact_id
                         ).order_by(ContactState.created_at.desc()).first()
-                        stage_name = last_state.state if last_state else None
-                        logger.info(f"Procesando CampaignContact {cc.id} (contact_id={cc.contact_id}, campaign_id={cc.campaign_id}) con stage '{stage_name}'. Solo actualización en Azure SQL.")
 
-                        # Actualizar la relación con el advisor si corresponde (ejemplo: commercial_advisor_id)
-                        # Aquí podrías agregar lógica para asignar el advisor si tienes el dato
-                        # cc.commercial_advisor_id = ...
+                        if contact_state:
+                            # Actualizamos el last_state en CampaignContact con el último estado
+                            cc.last_state = contact_state.state
+                            logger.info(f"Procesando CampaignContact {cc.id} (contact_id={cc.contact_id}, campaign_id={cc.campaign_id}). Actualizando last_state a: '{contact_state.state}'")
 
-                        # Actualizar ContactState (crear uno nuevo si el estado cambió)
-                        if stage_name:
-                            contact_state = ContactState(
-                                contact_id=cc.contact_id,
-                                state=stage_name,
-                                category="manychat"
-                            )
-                            db.add(contact_state)
-                            db.commit()
-                            # Asociar el Contact con el último ContactState
+                            # Aseguramos que el Contact tenga el estado más reciente
                             contact = cc.contact
                             if contact:
                                 contact.last_state_id = contact_state.id
                                 db.add(contact)
                                 db.commit()
+                                logger.info(f"Contact {contact.id} actualizado con último estado ID: {contact_state.id}")
 
                         cc.sync_status = "synced"
                         db.add(cc)

@@ -92,65 +92,35 @@ async def receive_contact_event(
     - `whatsapp`: Número de WhatsApp (se mapea a phone en la BD)
     - `datetime_suscripcion`: Fecha/hora de suscripción inicial
     - `datetime_actual`: Fecha/hora del evento actual
-    - `ultimo_estado`: Estado actual del lead
     - `canal_entrada`: Canal de origen (Facebook, WhatsApp, etc.)
     - `estado_inicial`: Estado inicial del contacto
 
     **Nota:** El campo `whatsapp` se mapea internamente al campo `phone` en la base de datos.
     """
-    try:
-        # Log del evento recibido
-        logger.info(
-            "Evento de contacto recibido",
-            manychat_id=event.manychat_id,
-            nombre=event.nombre_lead,
-            estado=event.ultimo_estado,
-            canal=event.canal_entrada
-        )
-
-        # Validar que el manychat_id no esté vacío
-        if not event.manychat_id or not event.manychat_id.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="manychat_id no puede estar vacío"
-            )
-
-        # Enviar evento a la cola de contactos
-        await queue_service.send_message(
-            queue_name=queue_service.contact_queue_name,
-            event_data=event.dict()
-        )
-
-        # Respuesta exitosa
-        return {
-            "status": "accepted",
-            "message": "Evento de contacto encolado exitosamente",
-            "manychat_id": event.manychat_id,
-            "queue": queue_service.contact_queue_name
-        }
-
-    except QueueServiceError as e:
-        logger.error(
-            "Error al encolar evento de contacto",
-            error=str(e),
-            manychat_id=event.manychat_id
-        )
+    # Solo encolar el evento en la cola de contactos
+    logger.info(
+        "Evento de contacto recibido",
+        manychat_id=event.manychat_id,
+        nombre=event.nombre_lead,
+        estado=event.estado_inicial,
+        canal=event.canal_entrada
+    )
+    if not event.manychat_id or not event.manychat_id.strip():
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar el evento: {str(e)}"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="manychat_id no puede estar vacío"
         )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            "Error inesperado procesando evento de contacto",
-            error=str(e),
-            manychat_id=event.manychat_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error inesperado al procesar el evento"
-        )
+    event_data = event.dict()
+    await queue_service.send_message(
+        queue_name=queue_service.contact_queue_name,
+        event_data=event_data
+    )
+    return {
+        "status": "accepted",
+        "message": "Evento de contacto encolado exitosamente",
+        "manychat_id": event.manychat_id,
+        "queue": queue_service.contact_queue_name
+    }
 
 
 
@@ -171,154 +141,37 @@ class CampaignAssignmentEvent(BaseModel):
     tipo_asignacion: str = Field(...)
     summary: str | None = None
 
-@router.post(
-    "/webhook/campaign-assignment",
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Recibe asignaciones de campaña de ManyChat",
-    response_description="Evento de campaña recibido, actualiza CampaignContact y ContactState, y encola para procesamiento asíncrono",
-    responses={
-        202: {
-            "description": "Evento de campaña aceptado, CampaignContact actualizado y evento encolado exitosamente",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "status": "accepted",
-                        "message": "CampaignContact actualizado y evento encolado exitosamente",
-                        "manychat_id": "123456789",
-                        "campaign_id": "campaign_verano_2024",
-                        "queue": "manychat-campaign-queue"
-                    }
-                }
-            }
-        },
-        400: {
-            "description": "Datos inválidos en el evento",
-            "content": {
-                "application/json": {
-                    "example": {"detail": "El contacto debe existir antes de asignar una campaña"}
-                }
-            }
-        }
-    }
-)
-async def receive_campaign_assignment(
-    event: CampaignAssignmentEvent,
+
+# Nuevo endpoint unificado para asignación de campaña y asesores
+from app.schemas.campaign_contact import CampaignContactUpsert
+from app.api.v1.endpoints.campaign_contact import assign_campaign_and_state
+from fastapi import Request
+from sqlalchemy.orm import Session
+
+# Nueva función para respuesta personalizada
+async def assign_campaign_and_state_response(
+    data: CampaignContactUpsert,
     request: Request,
     api_key: str = Depends(verify_api_key),
-    queue_service: QueueService = Depends(get_queue_service),
     db: Session = Depends(get_db)
-) -> Dict[str, Any]:
-    """
-    Recibe un evento de asignación de campaña desde ManyChat, actualiza CampaignContact y ContactState, y encola el evento para procesamiento.
-    """
-    try:
-        logger.info(
-            "Evento de asignación de campaña recibido",
-            manychat_id=event.manychat_id,
-            campaign_id=event.campaign_id,
-            comercial_id=event.comercial_id,
-            tipo=event.tipo_asignacion,
-            ultimo_estado=event.ultimo_estado,
-            summary=event.summary
-        )
+):
+    result = await assign_campaign_and_state(data, request, db)
+    return {
+        "status": "accepted",
+        "message": "Asignación encolada correctamente",
+        "manychat_id": data.manychat_id,
+        "queue": "manychat-campaign-queue"
+    }
 
-        # Validaciones básicas
-        if not event.manychat_id or not event.manychat_id.strip():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="manychat_id no puede estar vacío"
-            )
-        if not event.campaign_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="campaign_id no puede estar vacío"
-            )
-
-        # Buscar contacto
-        contact = db.query(Contact).filter(Contact.manychat_id == event.manychat_id).first()
-        if not contact:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="El contacto no existe, debe crearse primero"
-            )
-
-        # Buscar o crear CampaignContact
-        campaign_contact = db.query(CampaignContact).filter(
-            CampaignContact.contact_id == contact.id,
-            CampaignContact.campaign_id == event.campaign_id
-        ).first()
-        if campaign_contact:
-            # Actualizar campos relevantes
-            if event.comercial_id:
-                campaign_contact.commercial_advisor_id = event.comercial_id
-            if event.medico_id:
-                campaign_contact.medical_advisor_id = event.medico_id
-            if event.ultimo_estado:
-                campaign_contact.last_state = event.ultimo_estado
-            if event.summary:
-                campaign_contact.summary = event.summary
-            campaign_contact.sync_status = "updated"
-        else:
-            campaign_contact = CampaignContact(
-                contact_id=contact.id,
-                campaign_id=event.campaign_id,
-                commercial_advisor_id=event.comercial_id,
-                medical_advisor_id=event.medico_id,
-                last_state=event.ultimo_estado,
-                summary=event.summary,
-                sync_status="new"
-            )
-            db.add(campaign_contact)
-        db.commit()
-
-        # Actualizar ContactState
-        if event.ultimo_estado:
-            contact_state = ContactState(
-                contact_id=contact.id,
-                state=event.ultimo_estado,
-                category="manychat"
-            )
-            db.add(contact_state)
-            db.commit()
-
-        # Encolar el evento para el worker
-        await queue_service.send_message(
-            queue_name=queue_service.campaign_queue_name,
-            event_data=event.dict()
-        )
-
-        return {
-            "status": "accepted",
-            "message": "CampaignContact actualizado y evento encolado exitosamente",
-            "manychat_id": event.manychat_id,
-            "campaign_id": event.campaign_id,
-            "queue": queue_service.campaign_queue_name
-        }
-
-    except QueueServiceError as e:
-        logger.error(
-            "Error al encolar evento de campaña",
-            error=str(e),
-            manychat_id=event.manychat_id,
-            campaign_id=event.campaign_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al procesar el evento: {str(e)}"
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(
-            "Error inesperado procesando evento de campaña",
-            error=str(e),
-            manychat_id=event.manychat_id
-        )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error inesperado al procesar el evento"
-        )
-
+# Registrar el endpoint en el router de ManyChat Webhooks
+router.add_api_route(
+    "/webhook/campaign-contact-assign",
+    assign_campaign_and_state_response,
+    methods=["POST"],
+    summary="Asignar campaña y asesores (ManyChat → API → Cola → Worker → Odoo)",
+    response_model=None,
+    tags=["ManyChat Webhooks"]
+)
 
 # Endpoint de verificación para ManyChat
 @router.get(

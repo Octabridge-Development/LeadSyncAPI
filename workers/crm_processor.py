@@ -6,6 +6,7 @@ import os
 from app.services.queue_service import QueueService
 from app.services.odoo_crm_opportunity_service import odoo_crm_opportunity_service
 from app.schemas.crm_opportunity import CRMOpportunityEvent
+from app.db.models import Channel, CampaignContact
 
 # Configuración de logging robusta
 logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
@@ -38,11 +39,13 @@ class CRMProcessor:
                     assignment_datetime = data.get("assignment_datetime")
 
                     from app.db.session import SessionLocal
-                    from app.db.repositories import ContactRepository, ContactStateRepository, CampaignContactRepository
+                    from app.db.repositories import ContactRepository, ContactStateRepository, CampaignContactRepository, AdvisorRepository, ChannelRepository
                     db = SessionLocal()
                     contact_repo = ContactRepository(db)
                     state_repo = ContactStateRepository(db)
                     campaign_contact_repo = CampaignContactRepository(db)
+                    advisor_repo = AdvisorRepository(db)
+                    channel_repo = ChannelRepository(db)
                     contact = contact_repo.get_by_manychat_id(manychat_id)
                     if not contact:
                         logger.error(f"No se encontró el contacto con manychat_id={manychat_id} en la BD. Se elimina el mensaje de la cola.")
@@ -55,6 +58,25 @@ class CRMProcessor:
                         state=state,
                         category="manychat"
                     )
+
+                    # Buscar nombre del asesor comercial o médico si corresponde
+                    advisor_comercial_name = None
+                    advisor_medico_name = None
+                    # Buscar ambos asesores por sus IDs si existen en CampaignContact
+                    campaign_contact_obj = db.query(CampaignContact).filter_by(contact_id=contact.id, campaign_id=campaign_id).first()
+                    if campaign_contact_obj:
+                        if campaign_contact_obj.commercial_advisor_id:
+                            advisor_obj = advisor_repo.get_by_id_or_email(campaign_contact_obj.commercial_advisor_id)
+                            advisor_comercial_name = advisor_obj.name if advisor_obj else None
+                        if campaign_contact_obj.medical_advisor_id:
+                            advisor_obj = advisor_repo.get_by_id_or_email(campaign_contact_obj.medical_advisor_id)
+                            advisor_medico_name = advisor_obj.name if advisor_obj else None
+
+                    # Buscar nombre del canal correctamente por ID
+                    channel_name = None
+                    if contact.channel_id:
+                        channel_obj = db.query(Channel).filter_by(id=contact.channel_id).first()
+                        channel_name = channel_obj.name if channel_obj else None
 
                     # Upsert CampaignContact
                     cc_data = {
@@ -103,21 +125,21 @@ class CRMProcessor:
                     logger.info(f"Creando/actualizando oportunidad en Odoo para contacto: {full_name}, manychat_id: {manychat_id}, stage: {stage_manychat}, stage_odoo_id: {stage_odoo_id}")
                     if odoo_crm_opportunity_service and stage_odoo_id:
                         try:
-                            opportunity_id = await odoo_crm_opportunity_service.create_or_update_opportunity(
-                                manychat_id=contact.manychat_id,
-                                contact_name=full_name,  # El nombre del contacto será el nombre de la oportunidad
-                                stage_odoo_id=stage_odoo_id,
-                                # Asesores
-                                advisor_comercial_id=campaign_contact.commercial_advisor_id if assignment_type == "comercial" else None,
-                                advisor_medico_id=campaign_contact.medical_advisor_id if assignment_type == "medico" else None,
-                                # Datos de contacto
-                                contact_email=contact.email,
-                                contact_phone=contact.phone,
-                                # Canal y fechas
-                                source_id=contact.channel_id,  # Canal de entrada
-                                fecha_entrada=contact.entry_date,
-                                fecha_ultimo_estado=latest_state.created_at if latest_state else None
-                            )
+                            payload_odoo = {
+                                "manychat_id": contact.manychat_id,
+                                "contact_name": full_name,
+                                "stage_odoo_id": stage_odoo_id,
+                                "advisor_comercial_id": advisor_comercial_name,
+                                "advisor_medico_id": advisor_medico_name,
+                                "contact_email": contact.email,
+                                "contact_phone": contact.phone,
+                                "source_id": contact.channel_id,
+                                "channel_name": channel_name,
+                                "fecha_entrada": contact.entry_date,
+                                "fecha_ultimo_estado": latest_state.created_at if latest_state else None
+                            }
+                            logger.info(f"Payload enviado a Odoo: {payload_odoo}")
+                            opportunity_id = await odoo_crm_opportunity_service.create_or_update_opportunity(**payload_odoo)
                             logger.info(f"Oportunidad Odoo creada/actualizada con ID: {opportunity_id} para contacto {contact.id}")
                         except Exception as e:
                             logger.error(f"Error al crear/actualizar oportunidad Odoo para contacto {contact.id}: {e}")

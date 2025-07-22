@@ -16,7 +16,6 @@ class ManyChatContactEvent(BaseModel):
     # --------------------------------------------------
     datetime_suscripcion: Optional[datetime] = None
     datetime_actual: datetime
-    ultimo_estado: str
     canal_entrada: Optional[str] = None
     estado_inicial: Optional[str] = None
 

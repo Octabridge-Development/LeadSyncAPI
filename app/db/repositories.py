@@ -132,6 +132,7 @@ class CampaignContactRepository:
 
     def create_or_update_assignment(self, data: Dict[str, Any]) -> CampaignContact: 
         """Crea una nueva asignación de CampaignContact o actualiza una existente (UPSERT)."""
+        from datetime import datetime, timezone
         # Busca por contact_id y campaign_id para evitar duplicados de asignación
         existing = self.db.query(CampaignContact).filter(
             CampaignContact.contact_id == data["contact_id"],
@@ -142,8 +143,14 @@ class CampaignContactRepository:
             for key, value in data.items():
                 if hasattr(existing, key) and value is not None:
                     setattr(existing, key, value)
+            # Marcar como nuevo para que el worker CRM lo procese
+            existing.sync_status = "new"
             campaign_contact = existing
         else:
+            # Si no viene registration_date, usar ahora en UTC
+            if "registration_date" not in data or data["registration_date"] is None:
+                data["registration_date"] = datetime.now(timezone.utc)
+            data["sync_status"] = "new"
             campaign_contact = CampaignContact(**data)
             self.db.add(campaign_contact)
 
