@@ -21,87 +21,93 @@ Recomendaciones:
 """
 
 
+
 import asyncio
-import json
 import os
-from app.services.queue_service import QueueService, QueueServiceError
-from app.services.azure_sql_service import AzureSQLService
-from app.schemas.manychat import ManyChatCampaignAssignmentEvent
+from app.db.session import get_db_session_worker
+from app.db.models import CampaignContact, ContactState
+
 from app.core.logging import logger
+
+# Mapeo ManyChat Stage → Odoo Stage ID
+MANYCHAT_TO_ODOO_STAGE = {
+    "Recién Suscrito (Sin Asignar)": 16,
+    "Recién suscrito Pendiente de AC": 17,
+    "Retornó en AC": 18,
+    "Comienza Atención Comercial": 19,
+    "Retornó a Asesoría especializada": 20,
+    "Derivado Asesoría Médica": 21,
+    "Comienza Asesoría Médica": 22,
+    "Terminó Asesoría Médica": 23,
+    "No terminó Asesoria especializada Derivado a Comercial": 24,
+    "Comienza Cotización": 25,
+    "Orden de venta Confirmada": 26,
+}
 
 # Constante para el intervalo de sincronización por defecto
 DEFAULT_SYNC_INTERVAL = 10
 
-async def process_campaign_messages(queue_service: QueueService, azure_sql_service: AzureSQLService):
+async def process_campaign_contacts():
     """
-    Consume y procesa mensajes de la cola de campañas en un bucle infinito.
+    Worker que procesa CampaignContact con sync_status 'new', 'updated' o 'error'.
     """
-    sync_interval = int(os.getenv("SYNC_INTERVAL", DEFAULT_SYNC_INTERVAL))  # segundos entre ciclos
-    logger.info(f"Worker de campaña iniciado. Esperando mensajes de 'manychat-campaign-queue'... Intervalo: {sync_interval}s")
+    sync_interval = int(os.getenv("SYNC_INTERVAL", DEFAULT_SYNC_INTERVAL))
+    logger.info(f"Worker de campaña iniciado. Procesando CampaignContact con sync_status relevante. Intervalo: {sync_interval}s")
     while True:
-        message = None
         try:
-            message = await queue_service.receive_message(queue_service.campaign_queue_name)
-            
-            if message:
-                event_data = json.loads(message.content)
-                
-                # Valida y convierte campaign_id a int
-                if "campaign_id" in event_data and isinstance(event_data["campaign_id"], str):
+            for db in get_db_session_worker():
+                contacts = db.query(CampaignContact).filter(CampaignContact.sync_status.in_(["new", "updated", "error"])).all()
+                if not contacts:
+                    logger.info(f"No hay CampaignContact pendientes. Esperando {sync_interval} segundos...")
+                    await asyncio.sleep(sync_interval)
+                    continue
+                for cc in contacts:
                     try:
-                        event_data["campaign_id"] = int(event_data["campaign_id"])
-                    except (ValueError, TypeError):
-                        logger.error("El 'campaign_id' no es un entero válido.", raw_value=event_data["campaign_id"])
-                        raise ValueError("campaign_id debe ser un entero.")
-                
-                event = ManyChatCampaignAssignmentEvent(**event_data)
-                
-                # Procesa el evento en la base de datos
-                await azure_sql_service.process_campaign_event(event)
-                
-                # CORRECCIÓN: Elimina el mensaje de forma ASÍNCRONA
-                await queue_service.delete_message(
-                    queue_name=queue_service.campaign_queue_name,
-                    message_id=message.id,
-                    pop_receipt=message.pop_receipt
-                )
-                logger.info(
-                    "Mensaje de campaña procesado y eliminado.", 
-                    manychat_id=event.manychat_id, 
-                    message_id=message.id
-                )
-                await asyncio.sleep(sync_interval) # Espera configurable
-            else:
-                logger.info(f"No hay mensajes en la cola de campañas. Esperando {sync_interval} segundos...")
-                await asyncio.sleep(sync_interval)
+                        # Obtener el último estado relevante de ContactState para este contacto
+                        last_state = db.query(ContactState).filter(
+                            ContactState.contact_id == cc.contact_id
+                        ).order_by(ContactState.created_at.desc()).first()
+                        stage_name = last_state.state if last_state else None
+                        logger.info(f"Procesando CampaignContact {cc.id} (contact_id={cc.contact_id}, campaign_id={cc.campaign_id}) con stage '{stage_name}'. Solo actualización en Azure SQL.")
 
-        except QueueServiceError as e:
-            logger.error(f"Error de servicio de colas: {e}. Reintentando en {sync_interval} segundos.", exc_info=True)
+                        # Actualizar la relación con el advisor si corresponde (ejemplo: commercial_advisor_id)
+                        # Aquí podrías agregar lógica para asignar el advisor si tienes el dato
+                        # cc.commercial_advisor_id = ...
+
+                        # Actualizar ContactState (crear uno nuevo si el estado cambió)
+                        if stage_name:
+                            contact_state = ContactState(
+                                contact_id=cc.contact_id,
+                                state=stage_name,
+                                category="manychat"
+                            )
+                            db.add(contact_state)
+                            db.commit()
+                            # Asociar el Contact con el último ContactState
+                            contact = cc.contact
+                            if contact:
+                                contact.last_state_id = contact_state.id
+                                db.add(contact)
+                                db.commit()
+
+                        cc.sync_status = "synced"
+                        db.add(cc)
+                        db.commit()
+                        logger.info(f"CampaignContact {cc.id} actualizado correctamente en Azure SQL.")
+                    except Exception as e:
+                        db.rollback()
+                        cc.sync_status = "error"
+                        db.add(cc)
+                        db.commit()
+                        logger.error(f"Error al sincronizar CampaignContact {cc.id}: {e}")
             await asyncio.sleep(sync_interval)
-        except json.JSONDecodeError:
-            logger.error("Error al decodificar JSON. Mensaje malformado.", raw_content=message.content if message else "N/A")
-            if message:
-                # Intenta eliminar el mensaje malformado para no bloquear la cola
-                await queue_service.delete_message(
-                    queue_name=queue_service.campaign_queue_name,
-                    message_id=message.id,
-                    pop_receipt=message.pop_receipt
-                )
-                logger.warning("Mensaje malformado eliminado.", message_id=message.id)
         except Exception as e:
-            logger.error(f"Error inesperado procesando mensaje de campaña: {e}", exc_info=True)
+            logger.error(f"Error inesperado en el worker de CampaignContact: {e}", exc_info=True)
             await asyncio.sleep(sync_interval)
+
 
 async def main():
-    """
-    Función principal que inicializa los servicios y ejecuta el worker.
-    """
-    queue_service = QueueService()
-    await queue_service.ensure_queues_exist() # Inicializa las colas de forma asíncrona
-    
-    azure_sql_service = AzureSQLService()
-    
-    await process_campaign_messages(queue_service, azure_sql_service)
+    await process_campaign_contacts()
 
 if __name__ == "__main__":
     try:

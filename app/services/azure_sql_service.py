@@ -7,7 +7,7 @@ from app.db.repositories import (
 from app.schemas.crm import CRMLeadEvent
 from app.schemas.manychat import ManyChatContactEvent, ManyChatCampaignAssignmentEvent 
 from app.schemas.crm_opportunity import CRMOpportunityEvent
-from app.db.models import Contact # Importa el modelo Contact, que tiene odoo_contact_id y odoo_sync_status
+from app.db.models import Contact
 from typing import Optional
 import logging
 

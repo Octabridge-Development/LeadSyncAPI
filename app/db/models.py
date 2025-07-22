@@ -69,7 +69,6 @@ class Contact(Base):
     entry_date = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc)) # default al crear
     initial_state = Column(String(255), nullable=True) # Tu campo VARCHAR en DB
     odoo_contact_id = Column(String(100), nullable=True) # ID de contacto en Odoo
-    odoo_sync_status = Column(String(20), nullable=True, index=True, default='pending') # Estado de sincronización Odoo
 
     # Claves Foráneas y relaciones
     channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=True)
@@ -145,6 +144,7 @@ class CampaignContact(Base):
     last_state = Column(String(100), nullable=True)
     lead_state = Column(String(50), nullable=True)
     summary = Column(Text, nullable=True)
+    sync_status = Column(String(20), nullable=False, default="new", index=True, comment="Estados: new, updated, synced, error")
 
     # Relationships
     campaign = relationship("Campaign", back_populates="contact_assignments")
@@ -153,7 +153,7 @@ class CampaignContact(Base):
     medical_advisor = relationship("Advisor", foreign_keys=[medical_advisor_id], back_populates="medical_assignments")
 
     def __repr__(self):
-        return f"<CampaignContact(id={self.id}, contact_id={self.contact_id}, campaign_id={self.campaign_id})>"
+        return f"<CampaignContact(id={self.id}, contact_id={self.contact_id}, campaign_id={self.campaign_id}, sync_status='{self.sync_status}')>"
 
 
 class Advisor(Base):

@@ -145,13 +145,15 @@ class OdooCRMOpportunityService:
     async def create_or_update_opportunity(
         self,
         manychat_id: str,
-        opportunity_name: str,
+        contact_name: str,             # Nombre del contacto que será usado como nombre de la oportunidad
         stage_odoo_id: int,
-        advisor_odoo_id: Optional[int] = None, # ID del usuario en Odoo (asesor)
-        contact_name: Optional[str] = None,
+        advisor_comercial_id: Optional[int] = None,  # ID del asesor comercial
+        advisor_medico_id: Optional[int] = None,     # ID del asesor médico
         contact_email: Optional[str] = None,
         contact_phone: Optional[str] = None,
-        source_id: Optional[int] = None # ID de la fuente de la oportunidad, si aplica (ej. 'ManyChat')
+        source_id: Optional[int] = None,             # ID del canal de entrada
+        fecha_entrada: Optional[datetime] = None,    # Fecha de entrada
+        fecha_ultimo_estado: Optional[datetime] = None  # Fecha del último estado
     ) -> int:
         """
         Crea una nueva oportunidad en Odoo o actualiza una existente.
@@ -168,14 +170,21 @@ class OdooCRMOpportunityService:
                 contact_name = str(contact_name)
 
         opportunity_data = {
-            'name': opportunity_name,
+            'name': contact_name,  # Usamos el nombre del contacto como nombre de la oportunidad
             'stage_id': stage_odoo_id,
-            'x_studio_manychatid_api': manychat_id, # Campo personalizado correcto
-            'type': 'opportunity', # Asegura que es una oportunidad, no un lead genérico
-            # Si se requiere, mapear datos de contacto al partner_id o a los campos de lead
-            'contact_name': contact_name,
+            'x_studio_manychatid_api': manychat_id,
+            'type': 'opportunity',
+            # Datos de contacto básicos (solo email y teléfono)
             'email_from': contact_email,
             'phone': contact_phone,
+            # Fechas
+            'x_studio_fecha_entrada': fecha_entrada.strftime('%Y-%m-%d') if fecha_entrada else datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+            'x_studio_ultimo_estado_fecha': fecha_ultimo_estado.strftime('%Y-%m-%d') if fecha_ultimo_estado else datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+            # Asesores
+            'x_studio_asesor_medico': advisor_medico_id,  # Asesor médico
+            'x_studio_asesor_comercial': advisor_comercial_id,  # Asesor comercial
+            # Canal de entrada
+            'x_studio_canal_entrada': source_id,  # Canal de entrada/medio
         }
 
         # No asignar user_id/advisor

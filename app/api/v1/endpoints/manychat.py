@@ -6,7 +6,8 @@ from typing import Dict, Any
 from sqlalchemy.orm import Session
 
 from app.schemas.manychat import ManyChatContactEvent, ManyChatCampaignAssignmentEvent
-from app.schemas.campaign_contact import CampaignContactUpdate
+from pydantic import BaseModel, Field
+
 from app.services.queue_service import QueueService, QueueServiceError
 from app.api.deps import get_queue_service, verify_api_key
 from app.core.logging import logger
@@ -152,19 +153,37 @@ async def receive_contact_event(
         )
 
 
+
+from app.db.session import get_db
+from sqlalchemy.orm import Session
+from app.db.models import Contact, CampaignContact
+from app.db.models import ContactState
+
+
+# Nuevo esquema para el endpoint de campaign-assignment, alineado con ContactState y CRM
+class CampaignAssignmentEvent(BaseModel):
+    manychat_id: str = Field(...)
+    campaign_id: int = Field(...)
+    comercial_id: str | None = None
+    medico_id: str | None = None
+    datetime_actual: str | None = None
+    ultimo_estado: str = Field(...)
+    tipo_asignacion: str = Field(...)
+    summary: str | None = None
+
 @router.post(
     "/webhook/campaign-assignment",
     status_code=status.HTTP_202_ACCEPTED,
     summary="Recibe asignaciones de campaña de ManyChat",
-    response_description="Evento de campaña recibido y encolado para procesamiento asíncrono",
+    response_description="Evento de campaña recibido, actualiza CampaignContact y ContactState, y encola para procesamiento asíncrono",
     responses={
         202: {
-            "description": "Evento de campaña aceptado y encolado exitosamente",
+            "description": "Evento de campaña aceptado, CampaignContact actualizado y evento encolado exitosamente",
             "content": {
                 "application/json": {
                     "example": {
                         "status": "accepted",
-                        "message": "Evento de campaña encolado exitosamente",
+                        "message": "CampaignContact actualizado y evento encolado exitosamente",
                         "manychat_id": "123456789",
                         "campaign_id": "campaign_verano_2024",
                         "queue": "manychat-campaign-queue"
@@ -183,45 +202,24 @@ async def receive_contact_event(
     }
 )
 async def receive_campaign_assignment(
-        event: ManyChatCampaignAssignmentEvent,
-        request: Request,
-        api_key: str = Depends(verify_api_key),
-        queue_service: QueueService = Depends(get_queue_service)
+    event: CampaignAssignmentEvent,
+    request: Request,
+    api_key: str = Depends(verify_api_key),
+    queue_service: QueueService = Depends(get_queue_service),
+    db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Recibe un evento de asignación de campaña desde ManyChat y lo encola para procesamiento.
-
-    Este endpoint es llamado cuando:
-    - Un lead es asignado a una campaña específica
-    - Se asigna un asesor comercial o médico a un lead
-    - Se actualiza el estado de asignación de un lead
-
-    **Flujo del proceso:**
-    1. ManyChat envía el evento cuando se asigna un lead a una campaña
-    2. El evento se valida y se coloca en la cola `manychat-campaign-queue`
-    3. Un worker procesa el evento verificando que el contacto exista
-    4. Se crea o actualiza el registro en Campaign_Contact con los asesores asignados
-
-    **Campos del evento:**
-    - `manychat_id`: ID del contacto en ManyChat (debe existir previamente)
-    - `campaign_id`: ID o nombre de la campaña
-    - `comercial_id`: ID del asesor comercial asignado (opcional)
-    - `medico_id`: ID del asesor médico asignado (opcional)
-    - `datetime_actual`: Fecha/hora de la asignación
-    - `ultimo_estado`: Estado actual del lead en la campaña
-    - `tipo_asignacion`: Tipo de asignación (comercial/medico/both)
-
-    **Importante:** El contacto debe existir antes de poder asignarlo a una campaña.
-    Use el endpoint `/webhook/contact` primero si el contacto es nuevo.
+    Recibe un evento de asignación de campaña desde ManyChat, actualiza CampaignContact y ContactState, y encola el evento para procesamiento.
     """
     try:
-        # Log del evento recibido
         logger.info(
             "Evento de asignación de campaña recibido",
             manychat_id=event.manychat_id,
             campaign_id=event.campaign_id,
             comercial_id=event.comercial_id,
-            tipo=event.tipo_asignacion
+            tipo=event.tipo_asignacion,
+            ultimo_estado=event.ultimo_estado,
+            summary=event.summary
         )
 
         # Validaciones básicas
@@ -230,24 +228,68 @@ async def receive_campaign_assignment(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="manychat_id no puede estar vacío"
             )
-
-        # Corregido: campaign_id es int, no usar .strip()
         if not event.campaign_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="campaign_id no puede estar vacío"
             )
 
-        # 🔧 CORREGIDO: Usar send_message para consistencia
+        # Buscar contacto
+        contact = db.query(Contact).filter(Contact.manychat_id == event.manychat_id).first()
+        if not contact:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="El contacto no existe, debe crearse primero"
+            )
+
+        # Buscar o crear CampaignContact
+        campaign_contact = db.query(CampaignContact).filter(
+            CampaignContact.contact_id == contact.id,
+            CampaignContact.campaign_id == event.campaign_id
+        ).first()
+        if campaign_contact:
+            # Actualizar campos relevantes
+            if event.comercial_id:
+                campaign_contact.commercial_advisor_id = event.comercial_id
+            if event.medico_id:
+                campaign_contact.medical_advisor_id = event.medico_id
+            if event.ultimo_estado:
+                campaign_contact.last_state = event.ultimo_estado
+            if event.summary:
+                campaign_contact.summary = event.summary
+            campaign_contact.sync_status = "updated"
+        else:
+            campaign_contact = CampaignContact(
+                contact_id=contact.id,
+                campaign_id=event.campaign_id,
+                commercial_advisor_id=event.comercial_id,
+                medical_advisor_id=event.medico_id,
+                last_state=event.ultimo_estado,
+                summary=event.summary,
+                sync_status="new"
+            )
+            db.add(campaign_contact)
+        db.commit()
+
+        # Actualizar ContactState
+        if event.ultimo_estado:
+            contact_state = ContactState(
+                contact_id=contact.id,
+                state=event.ultimo_estado,
+                category="manychat"
+            )
+            db.add(contact_state)
+            db.commit()
+
+        # Encolar el evento para el worker
         await queue_service.send_message(
             queue_name=queue_service.campaign_queue_name,
             event_data=event.dict()
         )
 
-        # Respuesta exitosa
         return {
             "status": "accepted",
-            "message": "Evento de campaña encolado exitosamente",
+            "message": "CampaignContact actualizado y evento encolado exitosamente",
             "manychat_id": event.manychat_id,
             "campaign_id": event.campaign_id,
             "queue": queue_service.campaign_queue_name
@@ -330,12 +372,12 @@ async def verify_webhook(
     la fecha de asignación del médico y el último estado.
     Este endpoint se ejecuta de manera SÍNCRONA con la base de datos.
     """,
-    response_model=CampaignContactUpdate,
+    # response_model eliminado: CampaignContactUpdate,
     status_code=status.HTTP_200_OK,
     tags=["ManyChat"],
 )
 
-def _build_update_kwargs(campaign_contact_data: 'CampaignContactUpdate') -> dict:
+def _build_update_kwargs(campaign_contact_data) -> dict:
     """
     Construye el diccionario de campos a actualizar para CampaignContact a partir de los datos recibidos.
     """
@@ -350,7 +392,7 @@ def _build_update_kwargs(campaign_contact_data: 'CampaignContactUpdate') -> dict
     return update_kwargs
 
 def update_campaign_contact_endpoint(
-    campaign_contact_data: 'CampaignContactUpdate',
+    campaign_contact_data,
     db: 'Session' = Depends(get_db),
     api_key: str = Depends(verify_api_key)
 ):
