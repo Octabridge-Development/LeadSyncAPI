@@ -21,7 +21,7 @@ MiaSalud Integration API es una solución robusta para integrar ManyChat (chatbo
 1. **ManyChat** envía eventos (contactos y asignaciones de campaña) vía webhooks a la API.
 2. **API FastAPI** recibe los eventos y los encola en Azure Storage Queue.
 3. **Workers** procesan los mensajes de la cola y actualizan Azure SQL y Odoo.
-4. **Sincronización**: El estado de sincronización con Odoo se gestiona en Azure SQL (`odoo_sync_status`).
+4. **Sincronización**: El estado de sincronización con Odoo se gestiona en Azure SQL.
 5. **Errores**: Los mensajes fallidos van a una Dead Letter Queue (DLQ) para análisis.
 
 ## Componentes Clave

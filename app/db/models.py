@@ -59,17 +59,18 @@ class Contact(Base):
     __tablename__ = "Contact" # Nombre de tabla confirmado: "Contact"
 
     id = Column(Integer, primary_key=True, index=True, nullable=False)
-    manychat_id = Column(String(255), nullable=False, unique=True) # manychat_id debe ser único
+    manychat_id = Column(String(50), nullable=False, unique=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=True)
-    email = Column(String(255), nullable=True)
-    gender = Column(String(50), nullable=True)
-    phone = Column(String(50), nullable=True)
+    email = Column(String(100), nullable=True)
+    gender = Column(String(20), nullable=True)
+    phone = Column(String(20), nullable=True)
     subscription_date = Column(DateTime, nullable=True)
-    entry_date = Column(DateTime, nullable=True, default=lambda: datetime.now(timezone.utc)) # default al crear
-    initial_state = Column(String(255), nullable=True) # Tu campo VARCHAR en DB
-    odoo_contact_id = Column(String(100), nullable=True) # ID de contacto en Odoo
-    odoo_sync_status = Column(String(20), nullable=True, index=True, default='pending') # Estado de sincronización Odoo
+    entry_date = Column(DateTime, nullable=True)
+    channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=True)
+    address_id = Column(Integer, ForeignKey("Address.id"), nullable=True)
+    initial_state = Column(String(50), nullable=True)
+    odoo_contact_id = Column(String(50), nullable=True)
 
     # Claves Foráneas y relaciones
     channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=True)
@@ -145,6 +146,7 @@ class CampaignContact(Base):
     last_state = Column(String(100), nullable=True)
     lead_state = Column(String(50), nullable=True)
     summary = Column(Text, nullable=True)
+    sync_status = Column(String(20), nullable=False, default="new", index=True, comment="Estados: new, updated, synced, error")
 
     # Relationships
     campaign = relationship("Campaign", back_populates="contact_assignments")
@@ -153,7 +155,7 @@ class CampaignContact(Base):
     medical_advisor = relationship("Advisor", foreign_keys=[medical_advisor_id], back_populates="medical_assignments")
 
     def __repr__(self):
-        return f"<CampaignContact(id={self.id}, contact_id={self.contact_id}, campaign_id={self.campaign_id})>"
+        return f"<CampaignContact(id={self.id}, contact_id={self.contact_id}, campaign_id={self.campaign_id}, sync_status='{self.sync_status}')>"
 
 
 class Advisor(Base):

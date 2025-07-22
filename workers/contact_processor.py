@@ -41,16 +41,44 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
             message = await queue_service.receive_message(queue_service.contact_queue_name)
             if message:
                 logger.info(f"Mensaje recibido de la cola de contactos. ID: {message.id}")
-                event_data = json.loads(message.content)
-                event = ManyChatContactEvent(**event_data)
-
-                logger.info(f"Procesando evento de contacto para ManyChat ID: {event.manychat_id}")
-                result = await sql_service.process_contact_event(event)
-                logger.info(f"Evento de contacto procesado: {result}")
-
+                logger.info(f"Contenido bruto del mensaje recibido: {message.content}")
+                try:
+                    event_data = json.loads(message.content)
+                    logger.info(f"Payload parseado: {event_data}")
+                    event = ManyChatContactEvent(**event_data)
+                    logger.info(f"Procesando evento de contacto para ManyChat ID: {event.manychat_id}")
+                    result = await sql_service.process_contact_event(event)
+                    # --- Actualizar last_state en CampaignContact ---
+                    # Buscar el CampaignContact por contact_id y campaign_id (si existe)
+                    from app.db.session import get_db
+                    from app.db.repositories import CampaignContactRepository
+                    async def update_campaign_contact_and_contact_last_state():
+                        with get_db() as db:
+                            from app.db.repositories import ContactRepository
+                            repo_cc = CampaignContactRepository(db)
+                            repo_contact = ContactRepository(db)
+                            campaign_contact = db.query(repo_cc.model).filter_by(contact_id=result['contact_id']).order_by(repo_cc.model.registration_date.desc()).first()
+                            if campaign_contact:
+                                campaign_contact.last_state = event.estado_inicial
+                                db.add(campaign_contact)
+                                db.commit()
+                                db.refresh(campaign_contact)
+                                logger.info(f"CampaignContact actualizado: last_state={campaign_contact.last_state}")
+                                # Sincronizar campo en Contact
+                                contact = db.query(repo_contact.model).filter_by(id=result['contact_id']).first()
+                                if contact:
+                                    contact.initial_state = campaign_contact.last_state
+                                    db.add(contact)
+                                    db.commit()
+                                    db.refresh(contact)
+                                    logger.info(f"Contact actualizado: initial_state={contact.initial_state}")
+                    await update_campaign_contact_and_contact_last_state()
+                    logger.info(f"Evento de contacto procesado: {result}")
+                except Exception as e:
+                    logger.error(f"Error al parsear o procesar el mensaje: {e}")
                 # ...lógica de sincronización con Odoo eliminada...
                 # Elimina el mensaje de la cola tras procesar
-                await queue_service.delete_message(queue_service.contact_queue_name, message)
+                await queue_service.delete_message(queue_service.contact_queue_name, message.id, message.pop_receipt)
                 await asyncio.sleep(sync_interval) # Espera configurable
             else:
                 logger.info(f"No hay mensajes en la cola de contactos. Esperando {sync_interval} segundos...")
@@ -63,9 +91,9 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
             if message:
                 try:
                     await queue_service.delete_message(
-                        queue_name=queue_service.contact_queue_name,
-                        message_id=message.id,
-                        pop_receipt=message.pop_receipt
+                        queue_service.contact_queue_name,
+                        message.id,
+                        message.pop_receipt
                     )
                     logger.warning("Mensaje potencialmente problemático eliminado.", message_id=message.id)
                 except Exception as del_e:

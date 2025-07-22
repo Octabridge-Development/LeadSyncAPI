@@ -26,12 +26,6 @@ class ContactRepository:
         if existing_contact:
             # Actualiza el contacto existente
             for key, value in contact_data.items():
-                # Evitar actualizar 'odoo_sync_status' si ya está 'synced'
-                # a menos que se especifique explícitamente en contact_data con un nuevo valor.
-                # ODOO_SYNC_STATUS es manejado por update_odoo_sync_status
-                if key == 'odoo_sync_status':
-                    continue 
-
                 if hasattr(existing_contact, key) and value is not None:
                     setattr(existing_contact, key, value)
             contact = existing_contact
@@ -44,30 +38,6 @@ class ContactRepository:
         self.db.refresh(contact)
         return contact
 
-    def get_contacts_pending_odoo_sync(self, limit: int = 100) -> list[Contact]: # <--- **MÉTODO AÑADIDO**
-        """
-        Obtiene contactos de Azure SQL que están pendientes de sincronizar con Odoo.
-        Filtra por `odoo_sync_status = 'pending'`.
-        """
-        return self.db.query(Contact).filter(
-            Contact.odoo_sync_status == 'pending'
-        ).limit(limit).all()
-
-    def update_odoo_sync_status(self, manychat_id: str, status: str, odoo_contact_id: Optional[str] = None) -> Optional[Contact]: # <--- **MÉTODO AÑADIDO**
-        """
-        Actualiza el estado de sincronización (`odoo_sync_status`)
-        y el ID del contacto en Odoo (`odoo_contact_id`) en un registro de contacto de Azure SQL.
-        """
-        contact = self.get_by_manychat_id(manychat_id)
-        if contact:
-            contact.odoo_sync_status = status
-            if odoo_contact_id is not None: # Actualiza odoo_contact_id solo si se provee
-                contact.odoo_contact_id = odoo_contact_id
-            self.db.add(contact) # Asegura que el objeto esté en la sesión para commit
-            self.db.commit()
-            self.db.refresh(contact)
-            return contact
-        return None
 
 class ContactStateRepository:
     def __init__(self, db: Session):
@@ -162,6 +132,7 @@ class CampaignContactRepository:
 
     def create_or_update_assignment(self, data: Dict[str, Any]) -> CampaignContact: 
         """Crea una nueva asignación de CampaignContact o actualiza una existente (UPSERT)."""
+        from datetime import datetime, timezone
         # Busca por contact_id y campaign_id para evitar duplicados de asignación
         existing = self.db.query(CampaignContact).filter(
             CampaignContact.contact_id == data["contact_id"],
@@ -172,8 +143,14 @@ class CampaignContactRepository:
             for key, value in data.items():
                 if hasattr(existing, key) and value is not None:
                     setattr(existing, key, value)
+            # Marcar como nuevo para que el worker CRM lo procese
+            existing.sync_status = "new"
             campaign_contact = existing
         else:
+            # Si no viene registration_date, usar ahora en UTC
+            if "registration_date" not in data or data["registration_date"] is None:
+                data["registration_date"] = datetime.now(timezone.utc)
+            data["sync_status"] = "new"
             campaign_contact = CampaignContact(**data)
             self.db.add(campaign_contact)
 
