@@ -44,10 +44,15 @@ def create_contact(contact: ContactCreate, db: Session = Depends(deps.get_db)):
         )
     
     # Convertir el esquema Pydantic a un objeto de modelo SQLAlchemy
-    db_contact = models.Contact(**contact.model_dump()) # .model_dump() para Pydantic v2+
+    # Convertir campos vacíos a None para que SQLAlchemy los guarde como NULL
+    contact_data = contact.model_dump()
+    for field in ["last_name", "email", "gender"]:
+        if field in contact_data and (contact_data[field] is None or contact_data[field] == ""):
+            contact_data[field] = None
+    db_contact = models.Contact(**contact_data)
     db.add(db_contact)
     db.commit()
-    db.refresh(db_contact) # Actualiza el objeto con los datos generados por la DB (ej. ID)
+    db.refresh(db_contact)
     return db_contact
 
 @router.put("/{contact_id}", response_model=ContactInDB, summary="Actualizar contacto por ID")

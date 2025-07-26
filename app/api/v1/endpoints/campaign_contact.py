@@ -45,13 +45,13 @@ async def assign_campaign_and_state(
     # Asignar ambos asesores si están presentes y válidos
     if data.comercial_id not in [None, "", 0]:
         cc_data["commercial_advisor_id"] = data.comercial_id
-        cc_data["commercial_assignment_date"] = data.fecha_asignacion
+        cc_data["commercial_assignment_date"] = data.fecha_asignacion if data.fecha_asignacion else None
     else:
         cc_data["commercial_advisor_id"] = None
         cc_data["commercial_assignment_date"] = None
     if data.medico_id not in [None, "", 0]:
         cc_data["medical_advisor_id"] = data.medico_id
-        cc_data["medical_assignment_date"] = data.fecha_asignacion
+        cc_data["medical_assignment_date"] = data.fecha_asignacion if data.fecha_asignacion else None
     else:
         cc_data["medical_advisor_id"] = None
         cc_data["medical_assignment_date"] = None

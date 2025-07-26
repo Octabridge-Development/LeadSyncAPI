@@ -14,13 +14,13 @@ class CampaignContactUpsert(BaseModel):
     manychat_id: str = Field(..., description="ID de ManyChat del contacto")
     campaign_id: int = Field(..., description="ID de la campaña")
     state: str = Field(..., description="Estado actual del contacto en ManyChat")
-    registration_date: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="Fecha de registro del contacto en la campaña")
+    registration_date: Optional[datetime] = Field(None, description="Fecha de registro del contacto en la campaña")
     
     # Campos de asignación de asesores
     comercial_id: Optional[int] = Field(None, description="ID del asesor comercial")
     medico_id: Optional[int] = Field(None, description="ID del asesor médico")
     # tipo_asignacion eliminado temporalmente, se usará en el futuro
-    fecha_asignacion: datetime = Field(..., description="Fecha y hora de la asignación del asesor")
+    fecha_asignacion: Optional[datetime] = Field(None, description="Fecha y hora de la asignación del asesor")
     
     # Campos opcionales
     category: str = Field(default="manychat", description="Categoría del estado (default: manychat)")
@@ -59,7 +59,7 @@ class CampaignContactRead(BaseModel):
     contact_id: int
     commercial_advisor_id: Optional[int] = None
     medical_advisor_id: Optional[int] = None
-    registration_date: datetime
+    registration_date: Optional[datetime] = None
     commercial_assignment_date: Optional[datetime] = None
     commercial_process_start_date: Optional[datetime] = None
     medical_assignment_date: Optional[datetime] = None
