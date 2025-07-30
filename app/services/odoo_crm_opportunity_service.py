@@ -193,6 +193,8 @@ class OdooCRMOpportunityService:
         if existing_opportunity:
             # Actualizar oportunidad existente
             opportunity_id = existing_opportunity['id']
+            # No actualizar la fecha de entrada en updates
+            opportunity_data.pop('x_studio_fecha_entrada', None)
             logger.info(f"Actualizando oportunidad Odoo {opportunity_id} para ManyChat ID: {manychat_id}")
             try:
                 await self._execute_odoo_call(
