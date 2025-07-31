@@ -3,6 +3,12 @@ from typing import Optional
 from pydantic import BaseModel
 
 class ManyChatContactEvent(BaseModel):
+    @property
+    def ultimo_estado(self) -> Optional[str]:
+        """
+        Compatibilidad: permite acceder a 'ultimo_estado' como alias de 'estado_inicial'.
+        """
+        return self.estado_inicial
     """
     Define el esquema para un evento de contacto de ManyChat.
     Utilizado para procesar datos de contacto recibidos.
