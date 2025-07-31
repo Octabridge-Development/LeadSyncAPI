@@ -102,7 +102,7 @@ class AzureSQLService:
                     "commercial_advisor_id": commercial_advisor.id if commercial_advisor else None,
                     "medical_advisor_id": medical_advisor.id if medical_advisor else None,
                     "registration_date": event.datetime_actual,
-                    "last_state": event.estado_inicial,
+                    "last_state": event.ultimo_estado,
                     "lead_state": event.tipo_asignacion
                 }
                 if hasattr(event, "summary") and event.summary is not None:
