@@ -48,7 +48,7 @@ class AzureSQLService:
                 contact = contact_repo.create_or_update(contact_data)
                 state = state_repo.create_or_update(
                     contact_id=contact.id,
-                    state=event.ultimo_estado,
+                    state=event.estado_inicial,
                     category="manychat"
                 )
                 self.logger.info(f"Contacto ManyChat procesado y guardado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")
@@ -102,7 +102,7 @@ class AzureSQLService:
                     "commercial_advisor_id": commercial_advisor.id if commercial_advisor else None,
                     "medical_advisor_id": medical_advisor.id if medical_advisor else None,
                     "registration_date": event.datetime_actual,
-                    "last_state": event.ultimo_estado,
+                    "last_state": event.estado_inicial,
                     "lead_state": event.tipo_asignacion
                 }
                 if hasattr(event, "summary") and event.summary is not None:
