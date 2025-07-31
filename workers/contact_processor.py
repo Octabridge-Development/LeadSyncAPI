@@ -53,7 +53,9 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                     from app.db.session import get_db
                     from app.db.repositories import CampaignContactRepository
                     async def update_campaign_contact_and_contact_last_state():
-                        with get_db() as db:
+                        db_gen = get_db()
+                        db = next(db_gen)
+                        try:
                             from app.db.repositories import ContactRepository
                             repo_cc = CampaignContactRepository(db)
                             repo_contact = ContactRepository(db)
@@ -72,6 +74,11 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                                     db.commit()
                                     db.refresh(contact)
                                     logger.info(f"Contact actualizado: initial_state={contact.initial_state}")
+                        finally:
+                            try:
+                                next(db_gen)
+                            except StopIteration:
+                                pass
                     await update_campaign_contact_and_contact_last_state()
                     logger.info(f"Evento de contacto procesado: {result}")
                 except Exception as e:
