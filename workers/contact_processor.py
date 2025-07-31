@@ -52,12 +52,15 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                     # Buscar el CampaignContact por contact_id y campaign_id (si existe)
                     from app.db.session import get_db
                     from app.db.repositories import CampaignContactRepository
+                    from app.db.models import CampaignContact
                     async def update_campaign_contact_and_contact_last_state():
-                        with get_db() as db:
+                        db_gen = get_db()
+                        db = next(db_gen)
+                        try:
                             from app.db.repositories import ContactRepository
                             repo_cc = CampaignContactRepository(db)
                             repo_contact = ContactRepository(db)
-                            campaign_contact = db.query(repo_cc.model).filter_by(contact_id=result['contact_id']).order_by(repo_cc.model.registration_date.desc()).first()
+                            campaign_contact = db.query(CampaignContact).filter_by(contact_id=result['contact_id']).order_by(CampaignContact.registration_date.desc()).first()
                             if campaign_contact:
                                 campaign_contact.last_state = event.estado_inicial
                                 db.add(campaign_contact)
@@ -72,6 +75,11 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                                     db.commit()
                                     db.refresh(contact)
                                     logger.info(f"Contact actualizado: initial_state={contact.initial_state}")
+                        finally:
+                            try:
+                                next(db_gen)
+                            except StopIteration:
+                                pass
                     await update_campaign_contact_and_contact_last_state()
                     logger.info(f"Evento de contacto procesado: {result}")
                 except Exception as e:
