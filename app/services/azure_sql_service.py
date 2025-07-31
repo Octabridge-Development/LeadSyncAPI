@@ -34,15 +34,16 @@ class AzureSQLService:
                 contact_data = {
                     "manychat_id": event.manychat_id,
                     "first_name": event.nombre_lead,
-                    "last_name": event.apellido_lead,
-                    "email": event.email_lead,
-                    "gender": getattr(event, "gender", None),
-                    "phone": event.whatsapp,
-                    "subscription_date": event.datetime_suscripcion,
-                    "entry_date": event.datetime_actual,
+                    "last_name": event.apellido_lead if event.apellido_lead not in [None, ""] else None,
+                    "email": event.email_lead if event.email_lead not in [None, ""] else None,
+                    "gender": getattr(event, "gender", None)
+                        if getattr(event, "gender", None) not in [None, ""] else None,
+                    "phone": event.whatsapp if getattr(event, "whatsapp", None) not in [None, ""] else None,
+                    "subscription_date": event.datetime_suscripcion if getattr(event, "datetime_suscripcion", None) not in [None, ""] else None,
+                    "entry_date": event.datetime_actual if getattr(event, "datetime_actual", None) not in [None, ""] else None,
                     "channel_id": channel.id if channel else None,
-                    "address_id": getattr(event, "address_id", None),
-                    "initial_state": event.estado_inicial
+                    "address_id": getattr(event, "address_id", None) if getattr(event, "address_id", None) not in [None, ""] else None,
+                    "initial_state": event.estado_inicial if event.estado_inicial not in [None, ""] else None
                 }
                 contact = contact_repo.create_or_update(contact_data)
                 state = state_repo.create_or_update(

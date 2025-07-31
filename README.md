@@ -24,11 +24,21 @@ MiaSalud Integration API es una solución robusta para integrar ManyChat (chatbo
 4. **Sincronización**: El estado de sincronización con Odoo se gestiona en Azure SQL.
 5. **Errores**: Los mensajes fallidos van a una Dead Letter Queue (DLQ) para análisis.
 
+## Cambios recientes y mejoras
+
+- Eliminado el campo `ultimo_estado` de los esquemas y endpoints. Ahora el estado se gestiona únicamente con `state` o `estado_inicial` según el flujo.
+- El endpoint de contacto y el de asignación de campaña solo requieren el campo de estado actual (`state` o `estado_inicial`).
+- El campo `last_state` en la tabla `Campaign_Contact` se sincroniza automáticamente usando el valor de `state` recibido.
+- Si los campos de asesor (`comercial_id`, `medico_id`) vienen como `null`, `""` o `0`, se guardan como `NULL` en la base de datos, evitando errores de integridad referencial.
+- La tabla `Channel` fue limpiada y ahora solo contiene los canales principales: WhatsApp, TikTok, Instagram y Messenger.
+- Las respuestas de los endpoints son consistentes y devuelven información clara sobre el estado de la operación.
+- Ejemplos de payloads y documentación de endpoints actualizados para reflejar los cambios.
+
 ## Componentes Clave
 
 - **API (FastAPI):**
   - `/api/v1/manychat/webhook/contact`: Recibe eventos de contacto de ManyChat.
-  - `/api/v1/manychat/webhook/campaign-assignment`: Recibe asignaciones de campaña.
+  - `/api/v1/manychat/webhook/campaign-contact-assign`: Recibe asignaciones de campaña y asesores desde ManyChat.
   - `/api/v1/manychat/campaign-contacts/update-by-manychat-id`: Actualiza registros de CampaignContact.
   - CRUD para contactos, campañas, canales y asesores.
   - Endpoints de consulta y sincronización con Odoo (`/api/v1/odoo/contacts/`).
@@ -38,6 +48,7 @@ MiaSalud Integration API es una solución robusta para integrar ManyChat (chatbo
   - Procesan colas de Azure (`manychat-contact-queue`, `manychat-campaign-queue`).
   - Actualizan Azure SQL y sincronizan con Odoo.
   - Ejecutables vía `python -m workers.contact_processor` y `python -m workers.campaign_processor`.
+  - El worker de campaign_contact sincroniza automáticamente el campo `last_state` con el estado más reciente de ContactState.
 
 - **Azure Storage Queues:**
   - `manychat-contact-queue`: Contactos de ManyChat.
@@ -45,201 +56,61 @@ MiaSalud Integration API es una solución robusta para integrar ManyChat (chatbo
   - `dead-letter-queue`: Mensajes con errores.
 
 - **Azure SQL:**
-  - Persistencia principal de contactos, campañas, asesores y relaciones.
+  - Persistencia principal de contactos, campañas, asesores, canales y relaciones.
+  - Tabla `Channel` contiene solo los canales principales: WhatsApp, TikTok, Instagram, Messenger.
 
 - **Odoo:**
   - Sincronización de contactos y campañas vía JSON-RPC.
 
-## Estructura del Proyecto
-
-```
-miasalud-integration/
-│
-├── app/                            # Código principal de la aplicación
-│   ├── api/                        # Definición de endpoints API
-│   │   ├── __init__.py
-│   │   ├── deps.py                 # Dependencias y validaciones centralizadas para endpoints (API Key, servicios, etc.)
-│   │   └── v1/                     # Versión 1 de la API
-│   │       ├── __init__.py
-│   │       ├── router.py           # Router principal 
-│   │       └── endpoints/          # Endpoints organizados por dominio
-│   │           ├── __init__.py
-│   │           ├── manychat.py     # Endpoints para webhooks de ManyChat
-│   │           ├── odoo.py         # Endpoints para webhooks de Odoo
-│   │           └── reports.py      # Endpoints para reportes
-│   │
-│   ├── core/                       # Configuración central de la aplicación
-│   │   ├── __init__.py
-│   │   ├── config.py               # Configuración centralizada
-│   │   ├── security.py             # Funciones de autenticación
-│   │   └── logging.py              # Configuración de logging
-│   │
-│   ├── db/                         # Capa de acceso a datos
-│   │   ├── __init__.py
-│   │   ├── models.py               # Modelos SQLAlchemy
-│   │   ├── repositories.py         # Patrón repositorio para CRUD
-│   │   └── session.py              # Configuración de conexión a BD
-│   │
-│   ├── services/                   # Servicios de negocio
-│   │   ├── __init__.py
-│   │   ├── azure_sql_service.py    # Servicios para Azure SQL
-│   │   ├── manychat_service.py     # Servicios para ManyChat
-│   │   ├── odoo_service.py         # Servicios para Odoo
-│   │   └── queue_service.py        # Servicios para gestión de colas
-│   │
-│   ├── schemas/                    # Esquemas Pydantic 
-│   │   ├── __init__.py
-│   │   ├── common.py               # Esquemas compartidos
-│   │   ├── manychat.py             # Esquemas para ManyChat
-│   │   └── odoo.py                 # Esquemas para Odoo
-│   │
-│   ├── utils/                      # Utilidades generales
-│   │   ├── __init__.py
-│   │   ├── idempotency.py          # Funciones para garantizar idempotencia
-│   │   ├── monitoring.py           # Configuración de monitoreo
-│   │   └── retry.py                # Lógica de reintentos
-│   │
-│   └── main.py                     # Punto de entrada principal
-│
-├── azure_function/                 # Configuración para Azure Functions
-│   ├── __init__.py
-│   ├── function.json              # Configuración de la función
-│   └── host.json                  # Configuración del host
-│
-├── tests/                          # Pruebas automatizadas
-│   ├── __init__.py
-│   ├── conftest.py                 # Configuración de pruebas
-│   ├── test_api/                   # Pruebas de API
-│   ├── test_services/              # Pruebas de servicios
-│   └── test_workers/               # Pruebas de workers
-│
-├── workers/                        # Procesos de trabajo en segundo plano
-│   ├── __init__.py
-│   ├── queue_processor.py          # Procesador de cola principal
-│   └── scheduled_sync.py           # Sincronización periódica
-│
-├── .env                            # Variables de entorno (local)
-├── .env.example                    # Plantilla de variables de entorno
-├── requirements.txt                # Dependencias del proyecto
-└── README.md                       # Documentación general
-```
-
-## Endpoints Principales
-
-- `POST /api/v1/manychat/webhook/contact`  
-  Recibe eventos de contacto desde ManyChat y los encola para procesamiento asíncrono.
-- `POST /api/v1/manychat/webhook/campaign-assignment`  
-  Recibe asignaciones de campaña y asesores desde ManyChat y los encola para procesamiento asíncrono.
-- `PUT /api/v1/manychat/campaign-contacts/update-by-manychat-id`  
-  Actualiza campos de CampaignContact usando el ManyChat ID y, opcionalmente, el campaign_id.
-- `GET /api/v1/odoo/contacts/`  
-  Consulta contactos en Odoo.
-- CRUD para `/api/v1/contacts/`, `/api/v1/campaigns/`, `/api/v1/channels/`, `/api/v1/advisors/`.
-- Health: `/health`, `/api/v1/reports/health`
-
-## Ejemplo de Flujo
-
-1. **Nuevo contacto:**
-   - ManyChat → `/manychat/webhook/contact` → Azure Queue → Worker → Azure SQL + Odoo
-2. **Asignación de campaña:**
-   - ManyChat → `/manychat/webhook/campaign-assignment` → Azure Queue → Worker → Azure SQL
-3. **Actualización de CampaignContact:**
-   - ManyChat → `/manychat/campaign-contacts/update-by-manychat-id` → Azure SQL
-
-## Ejemplo de Uso de Endpoints
+## Ejemplo de Payloads y Endpoints
 
 ### Webhook de Contacto
 **POST** `/api/v1/manychat/webhook/contact`
 ```json
 {
-  "manychat_id": "MC99999",
+  "manychat_id": "MC20250722",
   "nombre_lead": "Ana",
-  "apellido_lead": "García",
-  "whatsapp": "+521234567891",
-  "datetime_suscripcion": "2025-06-10T10:00:00Z",
-  "datetime_actual": "2025-06-10T10:05:00Z",
-  "ultimo_estado": "Nuevo Lead",
-  "canal_entrada": "Facebook",
+  "apellido_lead": "Martínez",
+  "whatsapp": "+521234567890",
+  "email_lead": "ana.martinez@example.com",
+  "datetime_suscripcion": "2025-07-22T17:14:51.085Z",
+  "datetime_actual": "2025-07-22T17:14:51.085Z",
+  "canal_entrada": "WhatsApp",
   "estado_inicial": "Nuevo"
 }
 ```
 
 ### Webhook de Asignación de Campaña
-**POST** `/api/v1/manychat/webhook/campaign-assignment`
+**POST** `/api/v1/manychat/webhook/campaign-contact-assign`
 ```json
 {
-  "manychat_id": "MC99999",
-  "campaign_id": 85,
-  "comercial_id": "700",
-  "medico_id": "101",
-  "datetime_actual": "2025-06-10T10:10:00Z",
-  "ultimo_estado": "Asignado a campaña",
-  "tipo_asignacion": "medico",
-  "summary": "El cliente preguntó por el producto X y mostró interés en agendar una cita."
+  "manychat_id": "MC20250722",
+  "campaign_id": 1034,
+  "state": "Asignado a Comercial",
+  "registration_date": "2025-07-22T17:16:06.644Z",
+  "comercial_id": null,
+  "medico_id": null,
+  "fecha_asignacion": "2025-07-22T17:16:06.644Z",
+  "category": "manychat",
+  "summary": "Cliente interesado en producto X"
 }
 ```
 
-### Actualización de CampaignContact
-**PUT** `/api/v1/manychat/campaign-contacts/update-by-manychat-id`
-```json
-{
-  "manychat_id": "MC99999",
-  "campaign_id": 85,
-  "medical_advisor_id": 101,
-  "medical_assignment_date": "2025-06-10T11:00:00Z",
-  "last_state": "Asignado a médico",
-  "summary": "Conversación finalizada, cliente agendó consulta."
-}
-```
-
-### CRUD de Contactos
-**POST** `/api/v1/contacts/`
-```json
-{
-  "manychat_id": "MC12345",
-  "first_name": "Juan",
-  "last_name": "Pérez",
-  "phone": "+521234567890",
-  "channel_id": 1
-}
-```
-
-### CRUD de Campañas
-**POST** `/api/v1/campaigns/`
-```json
-{
-  "name": "Campaña Invierno 2025",
-  "date_start": "2025-06-12T14:49:28.163Z",
-  "date_end": "2025-12-31T23:59:59.000Z",
-  "budget": 50000,
-  "status": "Activa",
-  "channel_id": 1
-}
-```
+- Si no hay asesor, puedes enviar `null`, `""` o `0` en los campos de asesor y se guardarán como `NULL` en la base de datos.
 
 ### CRUD de Canales
 **POST** `/api/v1/channels/`
 ```json
 {
-  "name": "Facebook Messenger",
-  "description": "Canal oficial de Facebook"
+  "name": "WhatsApp",
+  "description": "Canal de WhatsApp"
 }
 ```
 
-### CRUD de Asesores
-**POST** `/api/v1/advisors/`
-```json
-{
-  "name": "Dra. Laura",
-  "email": "laura@ejemplo.com",
-  "phone": "+521234567891"
-}
-```
-
-## Seguridad
+## Validaciones y Seguridad
 - Todos los endpoints protegidos requieren el header `X-API-KEY`.
+- Si los campos de asesor no son válidos, se almacenan como `NULL`.
 - La validación de la API Key y otras dependencias se realiza de forma centralizada en `app/api/deps.py`.
-- No existen claves hardcodeadas en el código fuente; todas las credenciales se gestionan por variables de entorno o Azure Key Vault.
 
 ## Workers y Procesamiento Asíncrono
 - Ejecuta los workers con:
@@ -248,63 +119,20 @@ miasalud-integration/
   python -m workers.campaign_processor
   ```
 - Los workers procesan colas de Azure y sincronizan con Odoo y Azure SQL.
-- El intervalo de sincronización de los workers se define mediante la constante `DEFAULT_SYNC_INTERVAL` y puede ser configurado por variable de entorno (`SYNC_INTERVAL`).
+- El worker de campaign_contact sincroniza automáticamente el campo `last_state` con el estado más reciente de ContactState.
 
-## Monitoreo y Health
-- Health checks: `/health`, `/api/v1/reports/health`
-- Logs estructurados y métricas en `app/utils/monitoring.py`
-- Todo el logging es consistente y estructurado usando el logger configurado; no se usan prints en producción.
+## Canales Disponibles
 
-## Docker y Despliegue
-- Usa `docker-compose.yml` para desarrollo y pruebas locales.
-- Usa `docker/docker-compose.prod.yml` para producción.
-- Para App Service en Azure, usa:
-  ```bash
-  gunicorn wsgi:app --config gunicorn.conf.py
-  ```
-- Para workers en Azure Container Instances:
-  ```bash
-  docker build -f docker/Dockerfile.workers -t miasalud/workers:latest .
-  ```
+La tabla `Channel` contiene actualmente:
+- WhatsApp
+- TikTok
+- Instagram
+- Messenger
 
-## Testing
-- Ejecuta los tests con:
-  ```bash
-  pytest
-  ```
-- Los tests usan variables de entorno desde `.env` o CI/CD.
-# Buenas Prácticas y QA
-
-El proyecto fue sometido a un proceso de QA y refactorización para cumplir con buenas prácticas de código limpio, seguridad y mantenibilidad:
-
-- Se eliminaron duplicaciones internas y comentarios obsoletos.
-- Se centralizaron dependencias y validaciones en `app/api/deps.py`.
-- Se estandarizó el nombramiento: snake_case para variables/campos, PascalCase para clases.
-- Los valores por defecto importantes (como intervalos) están definidos como constantes descriptivas.
-- El código está libre de prints y comentarios temporales.
-- Se sigue el principio DRY y se promueve la mantenibilidad.
-
----
-
-# Observaciones de Migración CRM (Informe 15 Enero 2025)
-
-Este proyecto está en proceso de migración desde la sincronización de contactos con Odoo hacia un sistema de gestión de oportunidades CRM basado en stages. Las tareas de infraestructura y backend core (Felipe) incluyen:
-
-- Eliminación de la lógica de sincronización de contactos con Odoo.
-- Eliminación del worker odoo_sync_worker.py.
-- Actualización de azure_sql_service.py para remover llamadas a Odoo en contactos.
-- Creación de un nuevo schema CRM (crm_opportunity.py) para el mapeo de stages ManyChat ↔ Odoo.
-- Refactorización de workers/crm_processor.py para gestionar oportunidades CRM y mapeo automático de stages.
-- Actualización de docker-compose.yml y variables de entorno para el nuevo flujo.
-
-**Diferencias entre ramas:**
-- La rama release/contactos-odoo-backup contiene el código anterior con sincronización de contactos en Odoo.
-- La rama feature/crm-opportunities-only contiene el nuevo desarrollo enfocado en oportunidades CRM y elimina la sincronización de contactos con Odoo.
-
-**Impacto:**
-- Los contactos nuevos solo se crearán en Azure SQL.
-- Las oportunidades CRM se gestionan según el mapeo de stages ManyChat → Odoo.
-- No se crearán ni sincronizarán contactos nuevos en Odoo.
+## Notas de Migración y Refactorización
+- Eliminada la lógica de sincronización de contactos con Odoo (solo oportunidades CRM).
+- Refactorización de workers y servicios para un flujo más limpio y desacoplado.
+- Documentación y ejemplos actualizados para reflejar la arquitectura y flujos actuales.
 
 ---
 

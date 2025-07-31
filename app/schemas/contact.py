@@ -29,7 +29,7 @@ class ContactUpdate(ContactBase):
 # Esquema para la respuesta de un Contacto (incluye el ID y las fechas generadas por la DB)
 class ContactInDB(ContactBase):
     id: int
-    entry_date: datetime # La DB genera esto, lo incluimos en la respuesta
+    entry_date: Optional[datetime] = None # La DB genera esto, lo incluimos en la respuesta
     
     # Configuramos Pydantic para que pueda manejar objetos ORM (como los de SQLAlchemy)
     class Config:

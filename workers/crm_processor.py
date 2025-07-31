@@ -111,9 +111,9 @@ class CRMProcessor:
                         "Derivado Asesoría Médica": 21,
                         "Comienza Asesoría Médica": 22,
                         "Terminó Asesoría Médica": 23,
-                        "No terminó Asesoría especializada Derivado a Comercial": 24,
+                        "No terminó Asesoría especializada Derivado a Comecial": 24,
                         "Comienza Cotización": 25,
-                        "Orden de venta Confirmada": 26,
+                        "Orden de venta confirmada": 26,
                     }
                     stage_odoo_id = MANYCHAT_TO_ODOO_STAGE.get(stage_manychat)
                     if not stage_odoo_id:
