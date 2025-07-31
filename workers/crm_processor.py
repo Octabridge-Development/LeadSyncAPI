@@ -135,8 +135,8 @@ class CRMProcessor:
                                 "contact_phone": contact.phone,
                                 "source_id": contact.channel_id,
                                 "channel_name": channel_name,
-                                "fecha_entrada": contact.entry_date,
-                                "fecha_ultimo_estado": latest_state.created_at if latest_state else None
+                                "x_studio_fecha_entrada_1": contact.entry_date if contact.entry_date and hasattr(contact.entry_date, 'strftime') else None,
+                                "x_studio_ultimo_estado_fecha_1": latest_state.created_at if latest_state and hasattr(latest_state.created_at, 'strftime') else None
                             }
                             logger.info(f"Payload enviado a Odoo: {payload_odoo}")
                             opportunity_id = await odoo_crm_opportunity_service.create_or_update_opportunity(**payload_odoo)

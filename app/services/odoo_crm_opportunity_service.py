@@ -180,8 +180,9 @@ class OdooCRMOpportunityService:
             'type': 'opportunity',
             'email_from': contact_email,
             'phone': contact_phone,
-            'x_studio_fecha_entrada': fecha_entrada.strftime('%Y-%m-%d') if fecha_entrada else datetime.now(timezone.utc).strftime('%Y-%m-%d'),
-            'x_studio_ultimo_estado_fecha': fecha_ultimo_estado.strftime('%Y-%m-%d') if fecha_ultimo_estado else datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+            # Nombres y formato correctos para los campos datetime
+            'x_studio_fecha_entrada_1': fecha_entrada.strftime('%Y-%m-%d %H:%M:%S') if fecha_entrada else datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
+            'x_studio_ultimo_estado_fecha_1': fecha_ultimo_estado.strftime('%Y-%m-%d %H:%M:%S') if fecha_ultimo_estado else datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
             'x_studio_asesor_medico': advisor_medico_id,
             'x_studio_asesor_comercial': advisor_comercial_id,
             'x_studio_canal_entrada': canal_entrada_value,  # Ahora puede ser el nombre del canal
@@ -194,7 +195,7 @@ class OdooCRMOpportunityService:
             # Actualizar oportunidad existente
             opportunity_id = existing_opportunity['id']
             # No actualizar la fecha de entrada en updates
-            opportunity_data.pop('x_studio_fecha_entrada', None)
+            opportunity_data.pop('x_studio_fecha_entrada_1', None)
             logger.info(f"Actualizando oportunidad Odoo {opportunity_id} para ManyChat ID: {manychat_id}")
             try:
                 await self._execute_odoo_call(
