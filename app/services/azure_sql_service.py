@@ -48,7 +48,7 @@ class AzureSQLService:
                 contact = contact_repo.create_or_update(contact_data)
                 state = state_repo.create_or_update(
                     contact_id=contact.id,
-                    state=event.ultimo_estado,
+                    state=event.estado_inicial,
                     category="manychat"
                 )
                 self.logger.info(f"Contacto ManyChat procesado y guardado en Azure SQL. Contact ID: {contact.id}, State ID: {state.id}")

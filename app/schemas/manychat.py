@@ -11,9 +11,7 @@ class ManyChatContactEvent(BaseModel):
     nombre_lead: str
     apellido_lead: Optional[str] = None
     whatsapp: Optional[str] = None
-    # --- CAMBIO IMPORTANTE AQUÍ: Añadido email_lead ---
     email_lead: Optional[str] = None 
-    # --------------------------------------------------
     datetime_suscripcion: Optional[datetime] = None
     datetime_actual: datetime
     canal_entrada: Optional[str] = None
