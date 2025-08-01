@@ -117,6 +117,7 @@ class CampaignContact(Base):
     commercial_advisor_id = Column(Integer, ForeignKey("Advisor.id"), nullable=True)
     medical_advisor_id = Column(Integer, ForeignKey("Advisor.id"), nullable=True)
     registration_date = Column(DateTime, server_default=func.now())
+    summary = Column(String(255), nullable=True)
     sync_status = Column(String(20), nullable=False, default="new", index=True)
     campaign = relationship("Campaign", back_populates="contact_assignments")
     contact = relationship("Contact", back_populates="campaign_assignments")
