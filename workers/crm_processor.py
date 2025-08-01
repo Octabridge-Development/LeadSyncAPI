@@ -125,7 +125,7 @@ class CRMProcessor:
                     logger.info(f"Creando/actualizando oportunidad en Odoo para contacto: {full_name}, manychat_id: {manychat_id}, stage: {stage_manychat}, stage_odoo_id: {stage_odoo_id}")
                     if odoo_crm_opportunity_service and stage_odoo_id:
                         try:
-                            fecha_entrada = contact.entry_date if contact.entry_date and hasattr(contact.entry_date, 'strftime') else None
+                            fecha_entrada = contact.subscription_date if contact.subscription_date and hasattr(contact.subscription_date, 'strftime') else None
                             fecha_ultimo_estado = latest_state.created_at if latest_state and hasattr(latest_state.created_at, 'strftime') else None
                             payload_odoo = {
                                 "manychat_id": contact.manychat_id,
