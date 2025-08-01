@@ -39,7 +39,7 @@ async def assign_campaign_and_state(
     cc_data = {
         "contact_id": contact.id,
         "campaign_id": data.campaign_id,
-        "last_state": data.state,  # Actualizamos last_state con el estado actual
+        "state": data.state,  # Actualizamos state con el estado actual
         "summary": data.summary,
     }
     # Asignar ambos asesores si están presentes y válidos
