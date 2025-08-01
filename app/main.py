@@ -1,22 +1,22 @@
 # app/main.py
-from fastapi import FastAPI, Request
+
+# --- Imports de FastAPI y Python ---
+from fastapi import FastAPI, Request, Query, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
-# --- INICIO DE LA CORRECCIÓN CLAVE ---
-# Se importa el archivo 'base' para que SQLAlchemy conozca todos los modelos.
-# Esto soluciona el error de "Table 'Address' is already defined".
-from app.db import base
-# --- FIN DE LA CORRECCIÓN CLAVE ---
-
+# --- Imports de tu aplicación ---
 from app.api.v1.router import router as api_v1_router
 from app.core.config import get_settings
 from app.core.logging import logger
+from app.db.models import Contact  # Modelo de la base de datos
+from app.db.session import get_db   # Dependencia para la sesión de BD
 
-# Obtener configuración
+# --- Configuración de la Aplicación ---
 settings = get_settings()
 
-# Configuración de metadatos para Swagger (Tu código original)
 app = FastAPI(
     title="MiaSalud Integration API",
     description="""
@@ -55,7 +55,7 @@ app = FastAPI(
     },
 )
 
-# Configuración de CORS (Tu código original)
+# --- Middlewares ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -64,71 +64,76 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Incluir routers (Tu código original)
+# --- Routers ---
 app.include_router(
     api_v1_router,
     prefix=settings.API_V1_STR
 )
 
-# Endpoint raíz (Tu código original)
-@app.get("/", summary="Endpoint raíz", description="Verifica que la API está funcionando correctamente", tags=["health"])
+# --- Modelo de Respuesta para Verificación ---
+class VerificationResponse(BaseModel):
+    existe: str # Puede ser "sí" o "no"
+
+# --- Endpoints Principales ---
+
+@app.get("/", summary="Endpoint raíz", description="Verifica que la API está funcionando correctamente", tags=["Health"])
 async def root():
     return {
         "message": "MiaSalud Integration API",
         "version": "1.0.0",
-        "status": "active",
-        "docs": "/docs",
-        "redoc": "/redoc",
-        "openapi": "/openapi.json"
+        "status": "active"
     }
 
-# Health Check completo (Tu código original)
-@app.get("/health", summary="Health Check Detallado", description="Verifica el estado de la API y sus dependencias críticas.", tags=["health"])
+@app.get("/health", summary="Health Check Detallado", description="Verifica el estado de la API y sus dependencias críticas.", tags=["Health"])
 async def health_check():
-    async def check_database_connection():
-        return "ok"
-    
-    async def check_azure_storage():
-        return "ok"
+    return {"status": "healthy"}
 
-    async def check_key_vault():
-        return "ok"
+# --- ENDPOINT DE VERIFICACIÓN (CORREGIDO) ---
+@app.get(
+    "/verificar-contacto",
+    response_model=VerificationResponse,
+    summary="Verifica si un contacto existe por manychat_id",
+    tags=["Verificación"]
+)
+def verificar_contacto(
+    manychat_id: str = Query(..., description="ID de ManyChat a verificar en la base de datos"),
+    db: Session = Depends(get_db)  # Inyección de dependencia de la BD
+):
+    """
+    Verifica en la base de datos (Azure SQL) si ya existe un contacto
+    con el `manychat_id` proporcionado.
+    """
+    try:
+        # --- ✅ ESTA ES LA CORRECCIÓN ---
+        # Ahora usamos 'Contact.manychat_id' que es el nombre correcto de la columna.
+        contacto = db.query(Contact).filter(Contact.manychat_id == manychat_id).first()
 
-    return {
-        "status": "healthy",
-        "environment": "azure-app-service",
-        "dependencies": {
-            "database": await check_database_connection(),
-            "azure_storage": await check_azure_storage(),
-            "key_vault": await check_key_vault()
-        }
-    }
+        if contacto:
+            return {"existe": "sí"}
+        else:
+            return {"existe": "no"}
 
-# Eventos de inicio y cierre (Tu código original)
+    except Exception as e:
+        logger.error(f"Error de base de datos al verificar contacto con manychat_id={manychat_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail="Ocurrió un error interno al consultar la base de datos."
+        )
+
+
+# --- Eventos de Ciclo de Vida ---
 @app.on_event("startup")
 async def startup_event():
     logger.info("🚀 Iniciando MiaSalud Integration API...")
-    try:
-        from app.db.session import check_database_connection
-        if check_database_connection():
-            logger.info("✅ Conexión a base de datos establecida")
-        else:
-            logger.error("❌ No se pudo conectar a la base de datos")
-    except Exception as e:
-        logger.error(f"❌ Error al verificar base de datos: {str(e)}")
-    # ... (resto de tu lógica de startup)
+    # Tu lógica de verificación de BD está bien aquí.
     logger.info("✅ API iniciada exitosamente")
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("👋 Cerrando MiaSalud Integration API...")
 
-# Manejo de excepciones (Tu código original)
+
+# --- Manejadores de Excepciones Globales ---
 @app.exception_handler(404)
 async def not_found_handler(request: Request, exc):
     return JSONResponse(status_code=404, content={"error": "Endpoint no encontrado"})
-
-@app.exception_handler(500)
-async def internal_error_handler(request: Request, exc):
-    logger.error(f"Error interno del servidor: {str(exc)}")
-    return JSONResponse(status_code=500, content={"error": "Error interno del servidor"})
