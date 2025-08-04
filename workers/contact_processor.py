@@ -45,20 +45,9 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 try:
                     event_data = json.loads(message.content)
                     logger.info(f"Payload parseado: {event_data}")
-                    # Mapeo de campos de ManyChatContactEvent a Contact (sin channel_id)
-                    mapped_contact = {
-                        'manychat_id': event_data.get('manychat_id'),
-                        'first_name': event_data.get('nombre_lead'),
-                        'last_name': event_data.get('apellido_lead'),
-                        'email': event_data.get('email_lead'),
-                        'gender': None,  # No viene de ManyChat, puedes mapear si lo agregas
-                        'phone': event_data.get('whatsapp'),
-                        'subscription_date': event_data.get('datetime_suscripcion'),
-                        'initial_state': event_data.get('estado_inicial')
-                    }
-                    logger.info(f"Contacto mapeado para modelo Contact: {mapped_contact}")
-                    # Crea un objeto Contact con los campos correctos
-                    result = await sql_service.process_contact_event(mapped_contact)
+                    event = ManyChatContactEvent(**event_data)
+                    logger.info(f"Evento ManyChatContactEvent parseado: {event}")
+                    result = await sql_service.process_contact_event(event)
                     logger.info(f"Evento de contacto procesado: {result}")
                 except Exception as e:
                     logger.error(f"Error al parsear o procesar el mensaje: {e}")
