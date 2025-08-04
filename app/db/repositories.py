@@ -19,21 +19,21 @@ class ContactRepository:
     def create_or_update(self, contact_data: Dict[str, Any]) -> Contact:
         """
         Crea un nuevo contacto o actualiza uno existente (UPSERT)
-        basado en el manychat_id.
+        basado en el manychat_id. Filtra los campos para evitar errores por campos no válidos.
         """
-        existing_contact = self.get_by_manychat_id(contact_data["manychat_id"])
+        # Solo los campos válidos del modelo Contact
+        valid_fields = {c.name for c in Contact.__table__.columns}
+        filtered_data = {k: v for k, v in contact_data.items() if k in valid_fields}
+        existing_contact = self.get_by_manychat_id(filtered_data["manychat_id"])
         
         if existing_contact:
-            # Actualiza el contacto existente
-            for key, value in contact_data.items():
+            for key, value in filtered_data.items():
                 if hasattr(existing_contact, key) and value is not None:
                     setattr(existing_contact, key, value)
             contact = existing_contact
         else:
-            # Crea un nuevo contacto
-            contact = Contact(**contact_data)
+            contact = Contact(**filtered_data)
             self.db.add(contact)
-            
         self.db.commit()
         self.db.refresh(contact)
         return contact
