@@ -45,9 +45,20 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 try:
                     event_data = json.loads(message.content)
                     logger.info(f"Payload parseado: {event_data}")
-                    event = ManyChatContactEvent(**event_data)
-                    logger.info(f"Procesando evento de contacto para ManyChat ID: {event.manychat_id}")
-                    result = await sql_service.process_contact_event(event)
+                    # Mapeo de campos de ManyChatContactEvent a Contact (sin channel_id)
+                    mapped_contact = {
+                        'manychat_id': event_data.get('manychat_id'),
+                        'first_name': event_data.get('nombre_lead'),
+                        'last_name': event_data.get('apellido_lead'),
+                        'email': event_data.get('email_lead'),
+                        'gender': None,  # No viene de ManyChat, puedes mapear si lo agregas
+                        'phone': event_data.get('whatsapp'),
+                        'subscription_date': event_data.get('datetime_suscripcion'),
+                        'initial_state': event_data.get('estado_inicial')
+                    }
+                    logger.info(f"Contacto mapeado para modelo Contact: {mapped_contact}")
+                    # Crea un objeto Contact con los campos correctos
+                    result = await sql_service.process_contact_event(mapped_contact)
                     # --- Actualizar last_state en CampaignContact ---
                     # Buscar el CampaignContact por contact_id y campaign_id (si existe)
                     from app.db.session import get_db
@@ -62,7 +73,7 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                             repo_contact = ContactRepository(db)
                             campaign_contact = db.query(CampaignContact).filter_by(contact_id=result['contact_id']).order_by(CampaignContact.registration_date.desc()).first()
                             if campaign_contact:
-                                campaign_contact.last_state = event.estado_inicial
+                                campaign_contact.last_state = mapped_contact['initial_state']
                                 db.add(campaign_contact)
                                 db.commit()
                                 db.refresh(campaign_contact)
