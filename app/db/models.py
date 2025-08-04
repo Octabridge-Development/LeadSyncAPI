@@ -3,18 +3,26 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean, DECIMAL
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from app.db.session import Base
+from app.db.session import Base # Asegúrate que la importación de Base sea correcta
 
-# --- Modelo Address ---
+# --- Modelo Address (CORREGIDO) ---
 class Address(Base):
     __tablename__ = "Address"
+    
     id = Column(Integer, primary_key=True, index=True)
     street = Column(String(100), nullable=True)
     district = Column(String(50), nullable=True)
     city = Column(String(50), nullable=True)
     state = Column(String(50), nullable=True)
     country = Column(String(25), nullable=True)
-    contacts = relationship("Contact", back_populates="address")
+    
+    # --- ✅ CORRECCIÓN ---
+    # Añadimos la clave foránea para apuntar al Contacto al que pertenece esta dirección.
+    contact_id = Column(Integer, ForeignKey("Contact.id"))
+    
+    # Esta relación permite que desde una dirección (address) se pueda acceder 
+    # a la información del contacto (contact) al que pertenece.
+    contact = relationship("Contact", back_populates="addresses")
 
 # --- Modelo Channel ---
 class Channel(Base):
@@ -32,18 +40,14 @@ class ContactState(Base):
     state = Column(String(100), nullable=False)
     category = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    contact = relationship("Contact", foreign_keys=[contact_id], back_populates="state_history")
+    contact = relationship("Contact", back_populates="state_history")
 
 # --- Modelo Contact (CORREGIDO) ---
 class Contact(Base):
     __tablename__ = "Contact"
 
     id = Column(Integer, primary_key=True, index=True)
-    
-    # --- ✅ ESTA ES LA CORRECCIÓN ---
-    # El nombre del campo ahora es 'manychat_id' para coincidir con tu base de datos.
     manychat_id = Column(String(50), nullable=False, unique=True, index=True)
-    
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=True)
     email = Column(String(100), nullable=True, index=True)
@@ -52,19 +56,22 @@ class Contact(Base):
     subscription_date = Column(DateTime, nullable=True)
     entry_date = Column(DateTime, nullable=True)
     initial_state = Column(String(50), nullable=True)
-    odoo_contact_id = Column(String(50), nullable=True)
 
-    # --- Relaciones (SIN DUPLICADOS) ---
+    # --- Relaciones ---
     channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=True)
     channel = relationship("Channel", back_populates="contacts")
 
-    address_id = Column(Integer, ForeignKey("Address.id"), nullable=True)
-    address = relationship("Address", back_populates="contacts")
+    # --- ✅ CORRECCIÓN ---
+    # Se elimina la 'address_id' y 'address' de aquí.
+    # En su lugar, esta relación crea una lista de direcciones (addresses) para cada contacto.
+    # Si un contacto se elimina, todas sus direcciones se borrarán en cascada.
+    addresses = relationship("Address", back_populates="contact", cascade="all, delete-orphan")
 
     state_history = relationship("ContactState", back_populates="contact")
     campaign_assignments = relationship("CampaignContact", back_populates="contact")
     product_interactions = relationship("ProductInteraction", back_populates="contact")
 
+# --- (El resto de tus modelos permanecen igual) ---
 
 # --- Modelo SyncLog ---
 class SyncLog(Base):
@@ -77,7 +84,6 @@ class SyncLog(Base):
     status = Column(String(20), nullable=False)
     details = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-
 
 # --- Modelo Campaign ---
 class Campaign(Base):

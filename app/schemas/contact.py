@@ -13,7 +13,6 @@ class ContactBase(BaseModel):
     subscription_date: Optional[datetime] = Field(None, description="Fecha de suscripción del contacto")
     initial_state: Optional[str] = Field(None, max_length=255, description="Estado inicial del contacto")
     channel_id: Optional[int] = Field(None, description="ID del canal asociado")
-    address_id: Optional[int] = Field(None, description="ID de la dirección asociada")
 
 # Esquema para crear un Contacto (todos los campos requeridos para la creación inicial)
 class ContactCreate(ContactBase):
