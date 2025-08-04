@@ -1,10 +1,10 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-# Asegúrate de importar todos los modelos que usas en los repositorios
-from app.db.models import Contact, ContactState, Channel, Campaign, Advisor, CampaignContact 
+# --- ✅ CAMBIO: Se añade el modelo Address ---
+from app.db.models import Contact, ContactState, Channel, Campaign, Advisor, CampaignContact, Address 
 from typing import Optional, Dict, Any
 import logging
-from datetime import datetime, date # date no se usa en este archivo, puedes removerlo si no lo necesitas en otros repos.
+from datetime import datetime
 
 class ContactRepository:
     def __init__(self, db: Session):
@@ -38,12 +38,10 @@ class ContactRepository:
         self.db.refresh(contact)
         return contact
 
-
 class ContactStateRepository:
     def __init__(self, db: Session):
         self.db = db
         
-
     def create_or_update(self, contact_id: int, state: str, category: str = "manychat") -> ContactState:
         """
         Crea o actualiza el estado del contacto: si existe un registro previo, lo actualiza; si no, lo crea.
@@ -87,7 +85,6 @@ class ChannelRepository:
             self.db.refresh(channel)
         return channel
 
-# --- Nuevos Repositorios (Tarea A2) ---
 class CampaignRepository: 
     def __init__(self, db: Session):
         self.db = db
@@ -157,3 +154,45 @@ class CampaignContactRepository:
         self.db.commit()
         self.db.refresh(campaign_contact)
         return campaign_contact
+
+# --- 🚀 NUEVO REPOSITORIO AÑADIDO 🚀 ---
+class AddressRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def add_address_to_contact(self, manychat_id: str, address_data: Dict[str, Any]) -> Optional[Address]:
+        """
+        Añade una nueva dirección a un contacto existente, identificado por su manychat_id.
+
+        Args:
+            manychat_id: El ID de ManyChat del contacto.
+            address_data: Un diccionario con los datos de la dirección 
+                          (street, city, etc.).
+
+        Returns:
+            La nueva instancia de Address si el contacto fue encontrado, o None si no.
+        """
+        # 1. Buscar el contacto por su manychat_id
+        contact_repo = ContactRepository(self.db)
+        contact = contact_repo.get_by_manychat_id(manychat_id)
+
+        if not contact:
+            logging.warning(f"No se encontró un contacto con manychat_id: {manychat_id}. No se pudo añadir la dirección.")
+            return None
+
+        # 2. Crear la nueva instancia de Address
+        # Se asegura de que solo los campos del modelo Address se pasen al constructor.
+        valid_address_fields = {key: value for key, value in address_data.items() if hasattr(Address, key)}
+        new_address = Address(**valid_address_fields)
+        
+        # 3. Asociar la nueva dirección al contacto encontrado
+        new_address.contact_id = contact.id
+        
+        # 4. Guardar en la base de datos
+        self.db.add(new_address)
+        self.db.commit()
+        self.db.refresh(new_address)
+        
+        logging.info(f"Dirección añadida correctamente al contacto {contact.id} ({manychat_id}).")
+        
+        return new_address
