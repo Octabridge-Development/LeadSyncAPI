@@ -42,7 +42,8 @@ class QueueService:
             self.campaign_queue_name,
             self.contact_queue_name,
             self.crm_queue_name,
-            self.dlq_name
+            self.dlq_name,
+            self.address_queue_name
         ]
         for queue_name in queues_to_ensure:
             try:
