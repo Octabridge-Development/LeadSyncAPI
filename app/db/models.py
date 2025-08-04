@@ -56,7 +56,6 @@ class Contact(Base):
     subscription_date = Column(DateTime, nullable=True)
     entry_date = Column(DateTime, nullable=True)
     initial_state = Column(String(50), nullable=True)
-    odoo_contact_id = Column(String(50), nullable=True)
 
     # --- Relaciones ---
     channel_id = Column(Integer, ForeignKey("Channel.id"), nullable=True)

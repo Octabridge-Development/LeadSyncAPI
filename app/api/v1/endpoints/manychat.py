@@ -97,12 +97,23 @@ async def receive_address_event(
         "Evento de dirección recibido",
         manychat_id=event.manychat_id,
         street=event.street,
-        city=event.city
+        district=event.district,
+        city=event.city,
+        state=event.state,
+        country=event.country
     )
     if not event.manychat_id or not event.manychat_id.strip():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="manychat_id no puede estar vacío"
+        )
+    # Validar que al menos uno de los campos de dirección esté presente
+    if not any([
+        event.street, event.district, event.city, event.state, event.country
+    ]):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debe enviarse al menos un campo de dirección (street, district, city, state o country)"
         )
 
     # Asegúrate de que tu QueueService tenga definido 'address_queue_name'.
