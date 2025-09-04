@@ -45,53 +45,9 @@ async def process_contact_events(queue_service: QueueService, sql_service: Azure
                 try:
                     event_data = json.loads(message.content)
                     logger.info(f"Payload parseado: {event_data}")
-                    # Mapeo de campos de ManyChatContactEvent a Contact (sin channel_id)
-                    mapped_contact = {
-                        'manychat_id': event_data.get('manychat_id'),
-                        'first_name': event_data.get('nombre_lead'),
-                        'last_name': event_data.get('apellido_lead'),
-                        'email': event_data.get('email_lead'),
-                        'gender': None,  # No viene de ManyChat, puedes mapear si lo agregas
-                        'phone': event_data.get('whatsapp'),
-                        'subscription_date': event_data.get('datetime_suscripcion'),
-                        'initial_state': event_data.get('estado_inicial')
-                    }
-                    logger.info(f"Contacto mapeado para modelo Contact: {mapped_contact}")
-                    # Crea un objeto Contact con los campos correctos
-                    result = await sql_service.process_contact_event(mapped_contact)
-                    # --- Actualizar last_state en CampaignContact ---
-                    # Buscar el CampaignContact por contact_id y campaign_id (si existe)
-                    from app.db.session import get_db
-                    from app.db.repositories import CampaignContactRepository
-                    from app.db.models import CampaignContact
-                    async def update_campaign_contact_and_contact_last_state():
-                        db_gen = get_db()
-                        db = next(db_gen)
-                        try:
-                            from app.db.repositories import ContactRepository
-                            repo_cc = CampaignContactRepository(db)
-                            repo_contact = ContactRepository(db)
-                            campaign_contact = db.query(CampaignContact).filter_by(contact_id=result['contact_id']).order_by(CampaignContact.registration_date.desc()).first()
-                            if campaign_contact:
-                                campaign_contact.last_state = mapped_contact['initial_state']
-                                db.add(campaign_contact)
-                                db.commit()
-                                db.refresh(campaign_contact)
-                                logger.info(f"CampaignContact actualizado: last_state={campaign_contact.last_state}")
-                                # Sincronizar campo en Contact
-                                contact = db.query(repo_contact.model).filter_by(id=result['contact_id']).first()
-                                if contact:
-                                    contact.initial_state = campaign_contact.last_state
-                                    db.add(contact)
-                                    db.commit()
-                                    db.refresh(contact)
-                                    logger.info(f"Contact actualizado: initial_state={contact.initial_state}")
-                        finally:
-                            try:
-                                next(db_gen)
-                            except StopIteration:
-                                pass
-                    await update_campaign_contact_and_contact_last_state()
+                    event = ManyChatContactEvent(**event_data)
+                    logger.info(f"Evento ManyChatContactEvent parseado: {event}")
+                    result = await sql_service.process_contact_event(event)
                     logger.info(f"Evento de contacto procesado: {result}")
                 except Exception as e:
                     logger.error(f"Error al parsear o procesar el mensaje: {e}")

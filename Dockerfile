@@ -8,11 +8,12 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gnupg \
     curl \
-    && curl https://packages.microsoft.com/keys/microsoft.asc | apt-key add - \
+    apt-transport-https \
+    ca-certificates \
+    && curl https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /etc/apt/trusted.gpg.d/microsoft.gpg \
     && curl https://packages.microsoft.com/config/debian/11/prod.list > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
-    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
-    && apt-get install -y unixodbc-dev \
+    && ACCEPT_EULA=Y apt-get install -y msodbcsql18 unixodbc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia los requerimientos e instálalos

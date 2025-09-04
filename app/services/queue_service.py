@@ -33,6 +33,7 @@ class QueueService:
         self.contact_queue_name = "manychat-contact-queue"
         self.crm_queue_name = "manychat-crm-opportunities-queue"  # <--- MODIFICADO AQUÍ PARA ALINEAR CON EL DOCUMENTO 
         self.dlq_name = "manychat-events-dlq"
+        self.address_queue_name = "manychat-address-queue"
 
     async def ensure_queues_exist(self) -> None:
         """Verifica y crea las colas necesarias de forma asíncrona si no existen."""
@@ -41,7 +42,8 @@ class QueueService:
             self.campaign_queue_name,
             self.contact_queue_name,
             self.crm_queue_name,
-            self.dlq_name
+            self.dlq_name,
+            self.address_queue_name
         ]
         for queue_name in queues_to_ensure:
             try:
